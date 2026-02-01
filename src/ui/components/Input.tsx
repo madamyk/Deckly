@@ -1,0 +1,105 @@
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, TextInput, type TextInputProps, View } from 'react-native';
+
+import { Text } from '@/ui/components/Text';
+import { useDecklyTheme } from '@/ui/theme/provider';
+
+type Props = TextInputProps & {
+  label?: string;
+  hint?: string;
+  /**
+   * For controlled inputs where users typically "append/edit" (e.g. deck name).
+   * Moves the caret to the end on focus, without selecting the whole value.
+   */
+  cursorAtEndOnFocus?: boolean;
+};
+
+export function Input({ label, hint, cursorAtEndOnFocus, style, ...rest }: Props) {
+  const t = useDecklyTheme();
+  const [focused, setFocused] = useState(false);
+  const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(
+    undefined,
+  );
+
+  const valueStr = useMemo(() => {
+    // TextInput expects string; be defensive for any callers.
+    const v: any = (rest as any).value;
+    return typeof v === 'string' ? v : v == null ? '' : String(v);
+  }, [rest]);
+
+  const showPlaceholder = !valueStr && !!rest.placeholder;
+
+  return (
+    <View style={{ gap: 6 }}>
+      {label ? <Text variant="label">{label}</Text> : null}
+      <View style={{ position: 'relative' }}>
+        <TextInput
+          {...rest}
+          // We render our own placeholder so it can be visually lighter.
+          placeholder={undefined}
+          placeholderTextColor={t.colors.textMuted}
+          selection={rest.selection ?? forcedSelection}
+          onFocus={(e) => {
+            setFocused(true);
+            if (cursorAtEndOnFocus && !rest.selection) {
+              const end = valueStr.length;
+              setForcedSelection({ start: end, end });
+              // Release selection control on next tick so users can move the caret normally.
+              setTimeout(() => setForcedSelection(undefined), 0);
+            }
+            rest.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            rest.onBlur?.(e);
+          }}
+          style={[
+            styles.input,
+            {
+              backgroundColor: t.colors.surface,
+              borderColor: t.colors.border,
+              color: t.colors.text,
+            },
+            style,
+          ]}
+        />
+        {showPlaceholder ? (
+          <Text
+            pointerEvents="none"
+            style={[
+              styles.placeholder,
+              {
+                color: t.colors.textMuted,
+                opacity: focused ? 0.55 : 0.7,
+              },
+              rest.multiline && { top: 12 },
+            ]}
+          >
+            {rest.placeholder}
+          </Text>
+        ) : null}
+      </View>
+      {hint ? <Text variant="muted">{hint}</Text> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  input: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  placeholder: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    top: 12,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+});
