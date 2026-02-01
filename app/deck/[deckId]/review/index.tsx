@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import Animated, { FadeInRight, FadeOutLeft } from 'react-native-reanimated';
+import Animated, { FadeInRight, FadeOutLeft, FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
@@ -32,6 +32,7 @@ export default function ReviewScreen() {
   const [flippedId, setFlippedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [examplesEnabled, setExamplesEnabled] = useState(true);
+  const [animateExamples, setAnimateExamples] = useState(false);
   const [history, setHistory] = useState<
     {
       cardId: string;
@@ -63,6 +64,12 @@ export default function ReviewScreen() {
     }, [load]),
   );
 
+  useEffect(() => {
+    if (!animateExamples) return;
+    const id = setTimeout(() => setAnimateExamples(false), 300);
+    return () => clearTimeout(id);
+  }, [animateExamples]);
+
   const current = queue[index] ?? null;
   const flipped = !!current && flippedId === current.id;
   const frontExampleVisible =
@@ -70,6 +77,8 @@ export default function ReviewScreen() {
   const backExampleVisible =
     !!current && examplesEnabled && prefs.review.showExamplesOnBack && !!current.exampleL2?.trim();
   const note = current?.exampleNote?.trim() ? current.exampleNote.trim() : null;
+  const noteVisible = examplesEnabled && !!note;
+  const noteAnimate = animateExamples;
   const progress = useMemo(() => {
     if (!queue.length) return '0/0';
     return `${Math.min(index + 1, queue.length)}/${queue.length}`;
@@ -141,7 +150,10 @@ export default function ReviewScreen() {
       <Pressable
         onPress={() => {
           softHaptic();
-          setExamplesEnabled((v) => !v);
+          const nextEnabled = !examplesEnabled;
+          const shouldAnimateNote = flipped && !!note;
+          setAnimateExamples(shouldAnimateNote);
+          setExamplesEnabled(nextEnabled);
         }}
         hitSlop={12}
         style={({ pressed }) => ({
@@ -156,6 +168,26 @@ export default function ReviewScreen() {
           color={t.colors.textMuted}
         />
       </Pressable>
+
+      {current ? (
+        <Pressable
+          onPress={() => {
+            softHaptic();
+            router.push({
+              pathname: '/deck/[deckId]/cards/[cardId]',
+              params: { deckId, cardId: current.id },
+            });
+          }}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            paddingHorizontal: 8,
+            paddingVertical: 6,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Ionicons name="create-outline" size={20} color={t.colors.textMuted} />
+        </Pressable>
+      ) : null}
 
       {history.length ? (
         <Pressable
@@ -243,20 +275,24 @@ export default function ReviewScreen() {
           back={current.back}
           frontFooter={
             frontExampleVisible ? (
-              <ExampleFooter
-                key={`${current.id}:front`}
-                text={current.exampleL1!.trim()}
-                collapsedByDefault={prefs.review.examplesCollapsedByDefault}
-              />
+              <Animated.View entering={FadeInDown.duration(140)} exiting={FadeOutDown.duration(120)}>
+                <ExampleFooter
+                  key={`${current.id}:front`}
+                  text={current.exampleL1!.trim()}
+                  collapsedByDefault={prefs.review.examplesCollapsedByDefault}
+                />
+              </Animated.View>
             ) : null
           }
           backFooter={
             backExampleVisible ? (
-              <ExampleFooter
-                key={`${current.id}:back`}
-                text={current.exampleL2!.trim()}
-                collapsedByDefault={prefs.review.examplesCollapsedByDefault}
-              />
+              <Animated.View entering={FadeInDown.duration(140)} exiting={FadeOutDown.duration(120)}>
+                <ExampleFooter
+                  key={`${current.id}:back`}
+                  text={current.exampleL2!.trim()}
+                  collapsedByDefault={prefs.review.examplesCollapsedByDefault}
+                />
+              </Animated.View>
             ) : null
           }
           flipped={flipped}
@@ -308,8 +344,10 @@ export default function ReviewScreen() {
               </Row>
             </View>
 
-            {note ? (
-              <View
+            {noteVisible ? (
+              <Animated.View
+                entering={noteAnimate ? FadeInDown.duration(140) : undefined}
+                exiting={noteAnimate ? FadeOutDown.duration(120) : undefined}
                 style={{
                   marginTop: 12,
                   padding: 12,
@@ -317,22 +355,27 @@ export default function ReviewScreen() {
                   backgroundColor: t.colors.surface2,
                 }}
               >
-                <Row gap={8} style={{ justifyContent: 'center', alignItems: 'center' }}>
-                  <Ionicons name="information-circle-outline" size={16} color={t.colors.textMuted} />
+                <Row gap={8} style={{ alignItems: 'flex-start' }}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={16}
+                    color={t.colors.textMuted}
+                    style={{ marginTop: 2 }}
+                  />
                   <Text
                     style={{
                       flex: 1,
                       fontSize: 13,
                       lineHeight: 18,
-                      fontWeight: '600',
+                      fontWeight: '500',
                       color: t.colors.textMuted,
-                      textAlign: 'center',
+                      textAlign: 'left',
                     }}
                   >
                     {note}
                   </Text>
                 </Row>
-              </View>
+              </Animated.View>
             ) : null}
           </>
         ) : (
@@ -371,7 +414,7 @@ function ExampleFooter(props: {
             textAlign: 'center',
             maxWidth: 320,
           }}
-          numberOfLines={open ? 0 : 1}
+          numberOfLines={open ? 0 : 2}
         >
           {props.text}
         </Text>

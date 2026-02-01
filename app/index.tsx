@@ -63,7 +63,10 @@ export default function HomeScreen() {
         <View style={{ flex: 1 }}>
           <Text variant="title">Deckly</Text>
           <View style={{ height: 6 }} />
-          <Text variant="muted">Flashcards with spaced repetition. Offline-first.</Text>
+          <Text variant="muted">
+            Offline-first flashcards with spaced repetition, plus optional AI-generated example pairs
+            you can save and review later.
+          </Text>
         </View>
         <Pressable
           hitSlop={10}

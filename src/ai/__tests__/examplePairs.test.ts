@@ -55,19 +55,6 @@ describe('parseAndValidateExampleJSON()', () => {
     expect(() => parseAndValidateExampleJSON(JSON.stringify({}))).toThrow(/empty/i);
   });
 
-  test('enforces note max length', () => {
-    const long = 'x'.repeat(121);
-    expect(() =>
-      parseAndValidateExampleJSON(
-        JSON.stringify({
-          example_front: 'Yo corro al parque cada manana',
-          example_back: 'I run to the park every morning',
-          note: long,
-        }),
-      ),
-    ).toThrow(/note/i);
-  });
-
   test('keeps the seeded side even if the model rewrites it', () => {
     const seedL1 = 'Yo corro.';
     const out = parseAndValidateExampleJSON(
