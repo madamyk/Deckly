@@ -8,6 +8,7 @@ import { useDecksStore } from '@/stores/decksStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
 import { DECK_ACCENTS, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
@@ -60,7 +61,7 @@ export function NewDeckScreen() {
       <Stack.Screen options={{ title: 'New deck', headerLeft }} />
 
       <View style={{ flex: 1, padding: t.spacing.lg, gap: 14 }}>
-        <View style={{ padding: 14, borderRadius: 18, backgroundColor: t.colors.surface2 }}>
+        <Surface tone="muted" padding={14}>
           <Input
             label="Name"
             value={name}
@@ -70,9 +71,9 @@ export function NewDeckScreen() {
             onSubmitEditing={onCreate}
             editable={!createdDeckId}
           />
-        </View>
+        </Surface>
 
-        <View style={{ padding: 14, borderRadius: 18, backgroundColor: t.colors.surface2 }}>
+        <Surface tone="muted" padding={14}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text variant="label">Accent</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -106,7 +107,7 @@ export function NewDeckScreen() {
               );
             })}
           </View>
-        </View>
+        </Surface>
 
         {!createdDeckId ? (
           <Button title={creating ? 'Creating...' : 'Create deck'} onPress={onCreate} disabled={!canCreate} />
@@ -137,4 +138,3 @@ export function NewDeckScreen() {
     </Screen>
   );
 }
-

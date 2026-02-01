@@ -55,7 +55,7 @@ export function buildExamplePrompt(params: {
     `Constraints:`,
     `- example_front MUST be in ${frontLang}.`,
     `- example_back MUST be in ${backLang}.`,
-    `- Use the front_term naturally in example_front.`,
+    seedFront ? null : `- Use the front_term naturally in example_front.`,
     `- Translation quality: example_front and example_back MUST be the best possible natural translations of each other.`,
     `  - Preserve meaning, tense, and intent; avoid literal word-for-word translation if it sounds unnatural.`,
     `  - If there is any ambiguity, use back_term to disambiguate meaning.`,
@@ -67,7 +67,7 @@ export function buildExamplePrompt(params: {
     `- Difficulty: ${params.level} (medium complexity).`,
     `- Domain/context: ${params.domain}.`,
     `- NOTE field rules (important):`,
-    `  - note must be written in ${frontLang} (max 120 chars).`,
+    `  - note must be written in ${frontLang}.`,
     `  - note must describe ONLY the back_term (in ${backLang}): usage, ambiguity, regional nuance, false friends, common pitfalls.`,
     `  - do NOT define the front_term. Do NOT explain the English word; explain the ${backLang} term instead.`,
     `  - you may briefly compare to the front_term to clarify the pitfall, but the subject must remain the back_term.`,
@@ -109,8 +109,6 @@ export function parseAndValidateExampleJSON(
   if (!exampleFront || !exampleBack) throw new Error('AI returned empty example(s).');
   if (exampleFront.length > MAX_CHARS) throw new Error('example_front is too long.');
   if (exampleBack.length > MAX_CHARS) throw new Error('example_back is too long.');
-
-  if (note.length > 120) throw new Error('note is too long.');
 
   return { exampleFront, exampleBack, note };
 }

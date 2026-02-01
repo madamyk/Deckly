@@ -1,13 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, ScrollView, View } from 'react-native';
 
 import { getAiApiKey } from '@/data/secureStore';
 import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
+import { ToggleRow } from '@/ui/components/ToggleRow';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export default function SettingsScreen() {
@@ -24,17 +26,12 @@ export default function SettingsScreen() {
     }, []),
   );
 
-  const section = useMemo(
-    () => ({ padding: 14, borderRadius: 18, backgroundColor: t.colors.surface2 }),
-    [t.colors.surface2],
-  );
-
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: 'Settings' }} />
       <ScrollView contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 30 }}>
         <View style={{ gap: 12 }}>
-          <View style={section}>
+          <Surface tone="muted" padding={14}>
             <Text variant="h2">Review</Text>
             <View style={{ height: 10 }} />
 
@@ -53,9 +50,9 @@ export default function SettingsScreen() {
               value={prefs.review.examplesCollapsedByDefault}
               onToggle={(v) => patchPrefs({ review: { examplesCollapsedByDefault: v } })}
             />
-          </View>
+          </Surface>
 
-          <View style={section}>
+          <Surface tone="muted" padding={14}>
             <Text variant="h2">AI Assist</Text>
             <View style={{ height: 6 }} />
             <Text variant="muted">Optional. BYO OpenAI key. Examples are saved offline to SQLite.</Text>
@@ -93,33 +90,9 @@ export default function SettingsScreen() {
 
             <View style={{ height: 12 }} />
             <Button title="Configure AI Assist" variant="secondary" onPress={() => router.push('/settings/ai')} />
-          </View>
+          </Surface>
         </View>
       </ScrollView>
     </Screen>
-  );
-}
-
-function ToggleRow(props: { label: string; value: boolean; onToggle: (next: boolean) => void }) {
-  const t = useDecklyTheme();
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-      <Text style={{ fontWeight: '700' }}>{props.label}</Text>
-      <Pressable
-        onPress={() => props.onToggle(!props.value)}
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 999,
-          backgroundColor: props.value ? t.colors.primary : t.colors.surface,
-          borderWidth: 1,
-          borderColor: props.value ? 'transparent' : t.colors.border,
-        }}
-      >
-        <Text style={{ color: props.value ? '#fff' : t.colors.text, fontWeight: '900' }}>
-          {props.value ? 'On' : 'Off'}
-        </Text>
-      </Pressable>
-    </View>
   );
 }

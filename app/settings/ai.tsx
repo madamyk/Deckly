@@ -1,7 +1,7 @@
 import { Picker } from '@react-native-picker/picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 
 import { getAiApiKey, setAiApiKey } from '@/data/secureStore';
@@ -9,7 +9,9 @@ import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
+import { ToggleRow } from '@/ui/components/ToggleRow';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export default function AiSettingsScreen() {
@@ -19,17 +21,6 @@ export default function AiSettingsScreen() {
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [keyEditorOpen, setKeyEditorOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState('');
-
-  const group = useMemo(
-    () => ({
-      borderRadius: 22,
-      backgroundColor: t.colors.surface,
-      borderWidth: 1,
-      borderColor: t.colors.border,
-      overflow: 'hidden' as const,
-    }),
-    [t.colors.border, t.colors.surface],
-  );
 
   const refreshKey = useCallback(async () => {
     const key = await getAiApiKey();
@@ -86,7 +77,7 @@ export default function AiSettingsScreen() {
 
         <View style={{ height: 16 }} />
 
-        <View style={group}>
+        <Surface radius={22} style={{ overflow: 'hidden' }}>
           <View style={{ padding: 14 }}>
             <ToggleRow
               label="Enable AI features"
@@ -181,7 +172,7 @@ export default function AiSettingsScreen() {
               <Picker.Item label="neutral" value="neutral" />
             </Picker>
           </View>
-        </View>
+        </Surface>
 
         <View style={{ height: 12 }} />
         <Pressable
@@ -221,16 +212,7 @@ export default function AiSettingsScreen() {
               backgroundColor: 'rgba(0,0,0,0.55)',
             }}
           />
-          <View
-            style={{
-              borderRadius: 22,
-              padding: 16,
-              backgroundColor: t.colors.surface,
-              borderWidth: 1,
-              borderColor: t.colors.border,
-              gap: 10,
-            }}
-          >
+          <Surface radius={22} style={{ gap: 10, padding: 16 }}>
             <Text variant="h2">{apiKeySaved ? 'Replace API key' : 'Add API key'}</Text>
             <Text variant="muted">
               This key stays on your device (SecureStore). Requests go directly to OpenAI.
@@ -257,33 +239,9 @@ export default function AiSettingsScreen() {
                 }}
               />
             </View>
-          </View>
+          </Surface>
         </View>
       </Modal>
     </Screen>
-  );
-}
-
-function ToggleRow(props: { label: string; value: boolean; onToggle: (next: boolean) => void }) {
-  const t = useDecklyTheme();
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-      <Text style={{ fontWeight: '700' }}>{props.label}</Text>
-      <Pressable
-        onPress={() => props.onToggle(!props.value)}
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 999,
-          backgroundColor: props.value ? t.colors.primary : t.colors.surface,
-          borderWidth: 1,
-          borderColor: props.value ? 'transparent' : t.colors.border,
-        }}
-      >
-        <Text style={{ color: props.value ? '#fff' : t.colors.text, fontWeight: '900' }}>
-          {props.value ? 'On' : 'Off'}
-        </Text>
-      </Pressable>
-    </View>
   );
 }

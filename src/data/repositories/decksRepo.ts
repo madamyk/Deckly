@@ -1,6 +1,7 @@
 import { getDb } from '@/data/db';
 import type { Deck, DeckStats } from '@/domain/models';
 import { pickRandomDeckAccentKey } from '@/domain/decks/accent';
+import { deleteDeckLanguages } from '@/data/repositories/deckAiRepo';
 import { makeId } from '@/utils/id';
 import { nowMs } from '@/utils/time';
 
@@ -68,10 +69,6 @@ export async function createDeckWithAccent(params: {
   return deck;
 }
 
-export async function renameDeck(deckId: string, name: string): Promise<void> {
-  await updateDeck(deckId, { name: name.trim() });
-}
-
 export async function updateDeck(
   deckId: string,
   patch: Partial<Pick<Deck, 'name' | 'accentColor'>>,
@@ -107,6 +104,7 @@ export async function deleteDeck(deckId: string): Promise<void> {
       [now, now, deckId],
     );
   });
+  await deleteDeckLanguages(deckId);
 }
 
 export async function getDeckStats(deckId: string, now = nowMs()): Promise<DeckStats> {

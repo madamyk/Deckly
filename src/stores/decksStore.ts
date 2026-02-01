@@ -13,7 +13,6 @@ type DecksState = {
     deckId: string,
     patch: Partial<Pick<Deck, 'name' | 'accentColor'>>,
   ) => Promise<void>;
-  renameDeck: (deckId: string, name: string) => Promise<void>;
   deleteDeck: (deckId: string) => Promise<void>;
 };
 
@@ -55,12 +54,6 @@ export const useDecksStore = create<DecksState>((set, get) => ({
     } catch (e: any) {
       set({ error: e?.message ?? 'Failed to update deck.' });
     }
-  },
-
-  renameDeck: async (deckId: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    await get().updateDeck(deckId, { name: trimmed });
   },
 
   deleteDeck: async (deckId: string) => {

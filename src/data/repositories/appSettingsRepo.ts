@@ -20,3 +20,7 @@ export async function setSetting(key: string, value: string): Promise<void> {
   );
 }
 
+export async function deleteSetting(key: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM app_settings WHERE key = ?;', [key]);
+}

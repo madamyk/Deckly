@@ -42,3 +42,6 @@ export async function setDeckLanguages(deckId: string, langs: { front_language: 
   await appSettingsRepo.setSetting(key(deckId), JSON.stringify(payload));
 }
 
+export async function deleteDeckLanguages(deckId: string): Promise<void> {
+  await appSettingsRepo.deleteSetting(key(deckId));
+}

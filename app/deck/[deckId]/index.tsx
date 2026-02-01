@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as cardsRepo from '@/data/repositories/cardsRepo';
 import { getDeck, getDeckStats } from '@/data/repositories/decksRepo';
 import type { Card as CardModel, Deck, DeckStats } from '@/domain/models';
+import { useImportResultStore } from '@/stores/importResultStore';
 import { Card } from '@/ui/components/Card';
 import { EmptyState } from '@/ui/components/EmptyState';
 import { Pill } from '@/ui/components/Pill';
@@ -21,27 +22,7 @@ import { formatDueRelative, nowMs } from '@/utils/time';
 export default function DeckScreen() {
   const t = useDecklyTheme();
   const insets = useSafeAreaInsets();
-  const {
-    deckId,
-    imported,
-    skippedInvalid,
-    skippedDuplicates,
-    examplesTotal,
-    examplesDone,
-    examplesFailed,
-    examplesCancelled,
-    examplesFailureSummary,
-  } = useLocalSearchParams<{
-    deckId: string;
-    imported?: string;
-    skippedInvalid?: string;
-    skippedDuplicates?: string;
-    examplesTotal?: string;
-    examplesDone?: string;
-    examplesFailed?: string;
-    examplesCancelled?: string;
-    examplesFailureSummary?: string;
-  }>();
+  const { deckId } = useLocalSearchParams<{ deckId: string }>();
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [stats, setStats] = useState<DeckStats | null>(null);
@@ -96,61 +77,44 @@ export default function DeckScreen() {
     }, [loadAll]),
   );
 
-  useEffect(() => {
-    if (!imported) return;
-    const created = Number(imported || 0);
-    const invalid = Number(skippedInvalid || 0);
-    const dupes = Number(skippedDuplicates || 0);
-    const exTotal = Number(examplesTotal || 0);
-    const exDone = Number(examplesDone || 0);
-    const exFailed = Number(examplesFailed || 0);
-    const exCancelled = Number(examplesCancelled || 0);
+  useFocusEffect(
+    useCallback(() => {
+      const result = useImportResultStore.getState().consumeResult(deckId);
+      if (!result) return;
 
-    const details: string[] = [];
-    if (invalid) details.push(`Skipped (invalid): ${invalid}`);
-    if (dupes) details.push(`Skipped (duplicates): ${dupes}`);
-    if (exTotal) {
-      const genLine = exCancelled
-        ? exFailed
-          ? `Examples: cancelled at ${exDone}/${exTotal} (failed ${exFailed})`
-          : `Examples: cancelled at ${exDone}/${exTotal}`
-        : exFailed
-          ? `Examples: generated ${exTotal - exFailed}/${exTotal} (failed ${exFailed})`
-          : `Examples: generated ${exTotal}/${exTotal}`;
-      details.push(genLine);
-      if (exFailed && examplesFailureSummary) {
-        details.push(`Failures: ${examplesFailureSummary}`);
+      const created = Number(result.created || 0);
+      const invalid = Number(result.skippedInvalid || 0);
+      const dupes = Number(result.skippedDuplicates || 0);
+      const exTotal = Number(result.examplesTotal || 0);
+      const exDone = Number(result.examplesDone || 0);
+      const exFailed = Number(result.examplesFailed || 0);
+      const exCancelled = Number(result.examplesCancelled || 0);
+
+      const details: string[] = [];
+      if (invalid) details.push(`Skipped (invalid): ${invalid}`);
+      if (dupes) details.push(`Skipped (duplicates): ${dupes}`);
+      if (exTotal) {
+        const genLine = exCancelled
+          ? exFailed
+            ? `Examples: cancelled at ${exDone}/${exTotal} (failed ${exFailed})`
+            : `Examples: cancelled at ${exDone}/${exTotal}`
+          : exFailed
+            ? `Examples: generated ${exTotal - exFailed}/${exTotal} (failed ${exFailed})`
+            : `Examples: generated ${exTotal}/${exTotal}`;
+        details.push(genLine);
+        if (exFailed && result.examplesFailureSummary) {
+          details.push(`Failures: ${result.examplesFailureSummary}`);
+        }
       }
-    }
 
-    Alert.alert(
-      'Import complete',
-      details.length
-        ? `Imported ${created} cards.\n\n${details.join('\n')}`
-        : `Imported ${created} cards.`,
-    );
-
-    // Prevent showing the popup again.
-    router.setParams({
-      imported: undefined,
-      skippedInvalid: undefined,
-      skippedDuplicates: undefined,
-      examplesTotal: undefined,
-      examplesDone: undefined,
-      examplesFailed: undefined,
-      examplesCancelled: undefined,
-      examplesFailureSummary: undefined,
-    });
-  }, [
-    imported,
-    skippedInvalid,
-    skippedDuplicates,
-    examplesTotal,
-    examplesDone,
-    examplesFailed,
-    examplesCancelled,
-    examplesFailureSummary,
-  ]);
+      Alert.alert(
+        'Import complete',
+        details.length
+          ? `Imported ${created} cards.\n\n${details.join('\n')}`
+          : `Imported ${created} cards.`,
+      );
+    }, [deckId]),
+  );
 
   const headerRight = useMemo(
     () => () => (

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { format } from 'date-fns';
 
@@ -8,6 +8,7 @@ import { clearAiDebugEntries, listAiDebugEntries, type AiDebugEntry } from '@/ai
 import { Button } from '@/ui/components/Button';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
@@ -26,17 +27,6 @@ export default function AiDebugScreen() {
   const t = useDecklyTheme();
   const [items, setItems] = useState<AiDebugEntry[]>([]);
   const [selected, setSelected] = useState<AiDebugEntry | null>(null);
-
-  const group = useMemo(
-    () => ({
-      borderRadius: 22,
-      backgroundColor: t.colors.surface,
-      borderWidth: 1,
-      borderColor: t.colors.border,
-      overflow: 'hidden' as const,
-    }),
-    [t.colors.border, t.colors.surface],
-  );
 
   const load = useCallback(async () => {
     setItems(await listAiDebugEntries());
@@ -81,7 +71,7 @@ export default function AiDebugScreen() {
         {items.length === 0 ? (
           <Text variant="muted">No logs yet.</Text>
         ) : (
-          <View style={group}>
+          <Surface radius={22} style={{ overflow: 'hidden' }}>
             {items.map((it, idx) => (
               <Pressable
                 key={it.id}
@@ -114,7 +104,7 @@ export default function AiDebugScreen() {
                 </Row>
               </Pressable>
             ))}
-          </View>
+          </Surface>
         )}
       </ScrollView>
 
@@ -133,17 +123,7 @@ export default function AiDebugScreen() {
             }}
           />
           {selected ? (
-            <View
-              style={{
-                borderRadius: 22,
-                padding: 16,
-                backgroundColor: t.colors.surface,
-                borderWidth: 1,
-                borderColor: t.colors.border,
-                maxHeight: '80%',
-                gap: 10,
-              }}
-            >
+            <Surface radius={22} style={{ maxHeight: '80%', gap: 10, padding: 16 }}>
               <Row>
                 <Text variant="h2">Failure details</Text>
                 <Pressable onPress={() => setSelected(null)} hitSlop={10}>
@@ -172,7 +152,7 @@ export default function AiDebugScreen() {
               </ScrollView>
 
               <Button title="Close" variant="secondary" onPress={() => setSelected(null)} />
-            </View>
+            </Surface>
           ) : null}
         </View>
       </Modal>

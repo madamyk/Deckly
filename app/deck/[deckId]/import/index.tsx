@@ -21,10 +21,13 @@ import { getAiApiKey } from '@/data/secureStore';
 import { makeId } from '@/utils/id';
 import { generateAndPersistExamplePairs } from '@/services/examplePairService';
 import { ensureDeckLanguages } from '@/services/deckLanguageService';
+import { useImportResultStore } from '@/stores/importResultStore';
 import { Button } from '@/ui/components/Button';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
+import { TogglePill } from '@/ui/components/TogglePill';
 import { useDecklyTheme } from '@/ui/theme/provider';
 import { usePrefsStore } from '@/stores/prefsStore';
 
@@ -381,20 +384,22 @@ export default function ImportCsvScreen() {
       }
 
       // Go back to the deck and show a success notification there.
-      router.replace({
-        pathname: '/deck/[deckId]',
-        params: {
-          deckId,
-          imported: String(created),
-          skippedInvalid: String(skippedInvalid),
-          skippedDuplicates: String(skippedDuplicates),
-          examplesTotal: String(examplesTotal),
-          examplesDone: String(examplesDone),
-          examplesFailed: String(examplesFailed),
-          examplesCancelled: String(examplesCancelled),
-          examplesFailureSummary: failureSummary,
-        },
+      useImportResultStore.getState().setResult({
+        deckId,
+        created,
+        skippedInvalid,
+        skippedDuplicates,
+        examplesTotal,
+        examplesDone,
+        examplesFailed,
+        examplesCancelled,
+        examplesFailureSummary: failureSummary,
       });
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace({ pathname: '/deck/[deckId]', params: { deckId } });
+      }
     } catch (e: any) {
       Alert.alert('Deckly', e?.message ?? 'Import failed.');
     } finally {
@@ -503,19 +508,13 @@ export default function ImportCsvScreen() {
 
               <Row>
                 <Text variant="label">First row is header</Text>
-                <Pressable
-                  onPress={() => setHasHeader((v) => !v)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 999,
-                    backgroundColor: hasHeader ? t.colors.primary : t.colors.surface2,
-                  }}
-                >
-                  <Text style={{ color: hasHeader ? '#fff' : t.colors.text, fontWeight: '900' }}>
-                    {hasHeader ? 'On' : 'Off'}
-                  </Text>
-                </Pressable>
+                <TogglePill
+                  value={hasHeader}
+                  onToggle={(next) => setHasHeader(next)}
+                  activeBg={t.colors.primary}
+                  activeFg="#fff"
+                  inactiveBg={t.colors.surface2}
+                />
               </Row>
 
               <Row>
@@ -529,19 +528,13 @@ export default function ImportCsvScreen() {
                     <Ionicons name="information-circle-outline" size={18} color={t.colors.textMuted} />
                   </Pressable>
                 </View>
-                <Pressable
-                  onPress={() => setDedupe((v) => !v)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 999,
-                    backgroundColor: dedupe ? t.colors.primary2 : t.colors.surface2,
-                  }}
-                >
-                  <Text style={{ color: dedupe ? '#04201C' : t.colors.text, fontWeight: '900' }}>
-                    {dedupe ? 'On' : 'Off'}
-                  </Text>
-                </Pressable>
+                <TogglePill
+                  value={dedupe}
+                  onToggle={(next) => setDedupe(next)}
+                  activeBg={t.colors.primary2}
+                  activeFg={t.scheme === 'dark' ? '#05211C' : '#04201C'}
+                  inactiveBg={t.colors.surface2}
+                />
               </Row>
 
               <View style={{ gap: 10 }}>
@@ -609,77 +602,40 @@ export default function ImportCsvScreen() {
                 <View style={{ gap: 10 }}>
                   <Row>
                     <Text variant="label">Generate missing examples (AI)</Text>
-                    <Pressable
-                      onPress={() => {
+                    <TogglePill
+                      value={generateMissing}
+                      onToggle={(next) => {
                         setAiTogglesTouched(true);
-                        setGenerateMissing((v) => {
-                          const next = !v;
-                          if (next) setRegenerateAll(false);
-                          return next;
-                        });
+                        setGenerateMissing(next);
+                        if (next) setRegenerateAll(false);
                       }}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        backgroundColor: generateMissing ? t.colors.primary2 : t.colors.surface,
-                        borderWidth: 1,
-                        borderColor: generateMissing ? 'transparent' : t.colors.border,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: generateMissing ? (t.scheme === 'dark' ? '#05211C' : '#FFFFFF') : t.colors.text,
-                          fontWeight: '900',
-                        }}
-                      >
-                        {generateMissing ? 'On' : 'Off'}
-                      </Text>
-                    </Pressable>
+                      activeBg={t.colors.primary2}
+                      activeFg={t.scheme === 'dark' ? '#05211C' : '#FFFFFF'}
+                      inactiveBg={t.colors.surface}
+                      inactiveBorderColor={t.colors.border}
+                    />
                   </Row>
 
                   <Row>
                     <Text variant="label">Regenerate all examples (AI)</Text>
-                    <Pressable
-                      onPress={() => {
+                    <TogglePill
+                      value={regenerateAll}
+                      onToggle={(next) => {
                         setAiTogglesTouched(true);
-                        setRegenerateAll((v) => {
-                          const next = !v;
-                          if (next) setGenerateMissing(false);
-                          return next;
-                        });
+                        setRegenerateAll(next);
+                        if (next) setGenerateMissing(false);
                       }}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        borderRadius: 999,
-                        backgroundColor: regenerateAll ? t.colors.warning : t.colors.surface,
-                        borderWidth: 1,
-                        borderColor: regenerateAll ? 'transparent' : t.colors.border,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: regenerateAll ? (t.scheme === 'dark' ? '#241500' : '#FFFFFF') : t.colors.text,
-                          fontWeight: '900',
-                        }}
-                      >
-                        {regenerateAll ? 'On' : 'Off'}
-                      </Text>
-                    </Pressable>
+                      activeBg={t.colors.warning}
+                      activeFg={t.scheme === 'dark' ? '#241500' : '#FFFFFF'}
+                      inactiveBg={t.colors.surface}
+                      inactiveBorderColor={t.colors.border}
+                    />
                   </Row>
                 </View>
               )}
 
               {genProgress ? (
-                <View
-                  style={{
-                    marginTop: 6,
-                    padding: 12,
-                    borderRadius: 16,
-                    backgroundColor: t.colors.surface,
-                  }}
-                >
+                <Surface radius={16} border={false} padding={12} style={{ marginTop: 6 }}>
                   <Text variant="muted">
                     Generating examples: {genProgress.done}/{genProgress.total}
                   </Text>
@@ -728,7 +684,7 @@ export default function ImportCsvScreen() {
                     variant="dangerGhost"
                     onPress={() => abortRef.current?.abort()}
                   />
-                </View>
+                </Surface>
               ) : null}
 
               <View style={{ height: 8 }} />
@@ -747,15 +703,7 @@ export default function ImportCsvScreen() {
               ) : mappedPreview.length === 0 ? (
                 <Text variant="muted">Select column mapping to preview.</Text>
               ) : (
-                <View
-                  style={{
-                    borderRadius: 18,
-                    backgroundColor: t.colors.surface,
-                    borderWidth: 1,
-                    borderColor: t.colors.border,
-                    overflow: 'hidden',
-                  }}
-                >
+                <Surface radius={18} style={{ overflow: 'hidden' }}>
                   {mappedPreview.map((r, idx) => (
                     <View key={idx} style={{ padding: 14 }}>
                       {idx > 0 ? (
@@ -844,9 +792,9 @@ export default function ImportCsvScreen() {
                       </View>
                     </View>
                   ))}
-                </View>
+                </Surface>
               )}
-	            </View>
+            </View>
 	          </>
 	        </ScrollView>
 	      )}
@@ -865,16 +813,7 @@ export default function ImportCsvScreen() {
               backgroundColor: 'rgba(0,0,0,0.55)',
             }}
           />
-          <View
-            style={{
-              borderRadius: 22,
-              padding: 16,
-              backgroundColor: t.colors.surface,
-              borderWidth: 1,
-              borderColor: t.colors.border,
-              gap: 10,
-            }}
-          >
+          <Surface radius={22} style={{ gap: 10, padding: 16 }}>
             <Text variant="h2">Deduplicate</Text>
             <Text variant="muted">
               When enabled, Deckly skips importing any row that would create a card with the same
@@ -886,7 +825,7 @@ export default function ImportCsvScreen() {
               the match.
             </Text>
             <Button title="Got it" variant="secondary" onPress={() => setDedupeInfoOpen(false)} />
-          </View>
+          </Surface>
         </View>
       </Modal>
     </Screen>
@@ -993,14 +932,12 @@ function ColumnSelect(props: {
               backgroundColor: 'rgba(0,0,0,0.55)',
             }}
           />
-          <View
+          <Surface
+            radius={22}
             style={{
               padding: 14,
               borderTopLeftRadius: 22,
               borderTopRightRadius: 22,
-              backgroundColor: t.colors.surface,
-              borderWidth: 1,
-              borderColor: t.colors.border,
               maxHeight: '70%',
             }}
           >
@@ -1031,7 +968,7 @@ function ColumnSelect(props: {
             </ScrollView>
             <View style={{ height: 10 }} />
             <Button title="Close" variant="secondary" onPress={() => setOpen(false)} />
-          </View>
+          </Surface>
         </View>
       </Modal>
     </View>

@@ -66,7 +66,6 @@ function RootLayoutNav() {
           <Stack.Screen name="settings/ai" options={{ title: 'AI Assist' }} />
           <Stack.Screen name="settings/ai-debug" options={{ title: 'AI Debug' }} />
           <Stack.Screen name="deck/[deckId]/index" options={{ title: 'Deck' }} />
-          <Stack.Screen name="deck/[deckId]/rename" options={{ title: 'Rename deck' }} />
           <Stack.Screen
             name="deck/new"
             options={{

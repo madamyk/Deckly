@@ -16,6 +16,7 @@ import { useDecksStore } from '@/stores/decksStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
 import { DECK_ACCENTS, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
@@ -127,7 +128,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
             <Text variant="muted">Deck not found.</Text>
           ) : (
             <View style={{ gap: 12 }}>
-              <View style={{ padding: 14, borderRadius: 18, backgroundColor: t.colors.surface2 }}>
+              <Surface tone="muted" padding={14}>
                 <Input
                   label="Name"
                   value={name}
@@ -138,9 +139,9 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                   returnKeyType="done"
                   onSubmitEditing={save}
                 />
-              </View>
+              </Surface>
 
-              <View style={{ padding: 14, borderRadius: 18, backgroundColor: t.colors.surface2 }}>
+              <Surface tone="muted" padding={14}>
                 <View
                   style={{
                     flexDirection: 'row',
@@ -186,7 +187,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                     );
                   })}
                 </View>
-              </View>
+              </Surface>
 
               <View style={{ gap: 10, marginTop: 6 }}>
                 <Button
