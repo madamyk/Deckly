@@ -4,6 +4,9 @@ export type DecklyDb = SQLite.SQLiteDatabase;
 
 let dbPromise: Promise<DecklyDb> | null = null;
 
+// Dev-time schema version. If it changes, we reset the local DB (wipe all local data).
+const SCHEMA_VERSION = 3;
+
 export async function getDb(): Promise<DecklyDb> {
   if (!dbPromise) {
     dbPromise = SQLite.openDatabaseAsync('deckly.db');
@@ -20,19 +23,18 @@ async function setUserVersion(db: DecklyDb, v: number): Promise<void> {
   await db.execAsync(`PRAGMA user_version = ${v};`);
 }
 
-async function hasColumn(db: DecklyDb, table: string, column: string): Promise<boolean> {
-  const rows = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table});`);
-  return rows.some((r) => String(r.name) === column);
-}
-
-async function migrateToV1(db: DecklyDb): Promise<void> {
+async function resetToSchema(db: DecklyDb): Promise<void> {
   await db.execAsync('BEGIN;');
   try {
+    await db.execAsync('DROP TABLE IF EXISTS cards;');
+    await db.execAsync('DROP TABLE IF EXISTS decks;');
+    await db.execAsync('DROP TABLE IF EXISTS app_settings;');
+
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS decks (
         id TEXT PRIMARY KEY NOT NULL,
         name TEXT NOT NULL,
-        accentColor TEXT,
+        accentColor TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
         deletedAt INTEGER
@@ -45,8 +47,15 @@ async function migrateToV1(db: DecklyDb): Promise<void> {
         deckId TEXT NOT NULL,
         front TEXT NOT NULL,
         back TEXT NOT NULL,
-        example TEXT,
 
+        -- Bilingual example pair (offline persisted)
+        exampleL1 TEXT,
+        exampleL2 TEXT,
+        exampleNote TEXT,
+        exampleSource TEXT, -- "user" | "ai" | NULL
+        exampleGeneratedAt INTEGER,
+
+        -- Scheduling
         state TEXT NOT NULL,
         dueAt INTEGER NOT NULL,
         intervalDays INTEGER NOT NULL DEFAULT 0,
@@ -63,29 +72,22 @@ async function migrateToV1(db: DecklyDb): Promise<void> {
       );
     `);
 
-    await db.execAsync(
-      'CREATE INDEX IF NOT EXISTS idx_cards_deck_due ON cards(deckId, dueAt);',
-    );
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
+    `);
+
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_cards_deck_due ON cards(deckId, dueAt);');
     await db.execAsync(
       'CREATE INDEX IF NOT EXISTS idx_cards_deck_updated ON cards(deckId, updatedAt);',
     );
+    await db.execAsync(
+      'CREATE INDEX IF NOT EXISTS idx_cards_deck_state ON cards(deckId, state);',
+    );
 
-    await setUserVersion(db, 1);
-    await db.execAsync('COMMIT;');
-  } catch (e) {
-    await db.execAsync('ROLLBACK;');
-    throw e;
-  }
-}
-
-async function migrateToV2(db: DecklyDb): Promise<void> {
-  // Ensure new columns exist even if the DB was created by an older schema.
-  await db.execAsync('BEGIN;');
-  try {
-    if (!(await hasColumn(db, 'decks', 'accentColor'))) {
-      await db.execAsync('ALTER TABLE decks ADD COLUMN accentColor TEXT;');
-    }
-    await setUserVersion(db, 2);
+    await setUserVersion(db, SCHEMA_VERSION);
     await db.execAsync('COMMIT;');
   } catch (e) {
     await db.execAsync('ROLLBACK;');
@@ -99,10 +101,7 @@ export async function initDb(): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL;');
 
   const version = await getUserVersion(db);
-  if (version < 1) {
-    await migrateToV1(db);
-  }
-  if (version < 2) {
-    await migrateToV2(db);
+  if (version !== SCHEMA_VERSION) {
+    await resetToSchema(db);
   }
 }

@@ -6,6 +6,8 @@ import 'react-native-reanimated';
 import { useColorScheme } from 'react-native';
 
 import { initDb } from '@/data/db';
+import { bootstrapDevOpenAiKey } from '@/data/devBootstrap';
+import { usePrefsStore } from '@/stores/prefsStore';
 import { getNavigationTheme } from '@/ui/theme/navigationTheme';
 import { DecklyThemeProvider } from '@/ui/theme/provider';
 
@@ -25,6 +27,8 @@ export default function RootLayout() {
     (async () => {
       try {
         await initDb();
+        await usePrefsStore.getState().load();
+        await bootstrapDevOpenAiKey();
         if (!cancelled) setDbReady(true);
       } catch (e) {
         // Let the ErrorBoundary render; don't swallow init failures silently.
@@ -59,6 +63,8 @@ function RootLayoutNav() {
         <Stack>
           <Stack.Screen name="index" options={{ title: 'Deckly' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+          <Stack.Screen name="settings/ai" options={{ title: 'AI Assist' }} />
+          <Stack.Screen name="settings/ai-debug" options={{ title: 'AI Debug' }} />
           <Stack.Screen name="deck/[deckId]/index" options={{ title: 'Deck' }} />
           <Stack.Screen name="deck/[deckId]/rename" options={{ title: 'Rename deck' }} />
           <Stack.Screen

@@ -1,5 +1,5 @@
 import { getDb } from '@/data/db';
-import type { Card, CardState } from '@/domain/models';
+import type { Card, CardState, ExampleSource } from '@/domain/models';
 import type { CardPatch } from '@/domain/scheduling/schedule';
 import { makeId } from '@/utils/id';
 import { nowMs } from '@/utils/time';
@@ -10,7 +10,11 @@ function mapCardRow(row: any): Card {
     deckId: String(row.deckId),
     front: String(row.front),
     back: String(row.back),
-    example: row.example == null ? null : String(row.example),
+    exampleL1: row.exampleL1 == null ? null : String(row.exampleL1),
+    exampleL2: row.exampleL2 == null ? null : String(row.exampleL2),
+    exampleNote: row.exampleNote == null ? null : String(row.exampleNote),
+    exampleSource: row.exampleSource == null ? null : (String(row.exampleSource) as ExampleSource),
+    exampleGeneratedAt: row.exampleGeneratedAt == null ? null : Number(row.exampleGeneratedAt),
 
     state: row.state as CardState,
     dueAt: Number(row.dueAt),
@@ -42,10 +46,10 @@ export async function listCards(deckId: string, query?: string): Promise<Card[]>
     SELECT * FROM cards
     WHERE deckId = ?
       AND deletedAt IS NULL
-      AND (front LIKE ? OR back LIKE ? OR example LIKE ?)
+      AND (front LIKE ? OR back LIKE ? OR exampleL1 LIKE ? OR exampleL2 LIKE ? OR exampleNote LIKE ?)
     ORDER BY updatedAt DESC;
   `,
-    [deckId, like, like, like],
+    [deckId, like, like, like, like, like],
   );
   return rows.map(mapCardRow);
 }
@@ -60,7 +64,11 @@ export async function createCard(params: {
   deckId: string;
   front: string;
   back: string;
-  example?: string | null;
+  exampleL1?: string | null;
+  exampleL2?: string | null;
+  exampleNote?: string | null;
+  exampleSource?: ExampleSource | null;
+  exampleGeneratedAt?: number | null;
 }): Promise<Card> {
   const db = await getDb();
   const now = nowMs();
@@ -69,7 +77,11 @@ export async function createCard(params: {
     deckId: params.deckId,
     front: params.front.trim(),
     back: params.back.trim(),
-    example: params.example?.trim() || null,
+    exampleL1: params.exampleL1?.trim() || null,
+    exampleL2: params.exampleL2?.trim() || null,
+    exampleNote: params.exampleNote?.trim() || null,
+    exampleSource: params.exampleSource ?? null,
+    exampleGeneratedAt: params.exampleGeneratedAt ?? null,
     state: 'new',
     dueAt: now,
     intervalDays: 0,
@@ -85,17 +97,22 @@ export async function createCard(params: {
   await db.runAsync(
     `
     INSERT INTO cards (
-      id, deckId, front, back, example,
+      id, deckId, front, back,
+      exampleL1, exampleL2, exampleNote, exampleSource, exampleGeneratedAt,
       state, dueAt, intervalDays, ease, reps, lapses, learningStepIndex,
       createdAt, updatedAt, deletedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
   `,
     [
       card.id,
       card.deckId,
       card.front,
       card.back,
-      card.example,
+      card.exampleL1,
+      card.exampleL2,
+      card.exampleNote,
+      card.exampleSource,
+      card.exampleGeneratedAt,
       card.state,
       card.dueAt,
       card.intervalDays,
@@ -113,7 +130,12 @@ export async function createCard(params: {
 
 export async function updateCard(
   cardId: string,
-  patch: Partial<Pick<Card, 'front' | 'back' | 'example'>>,
+  patch: Partial<
+    Pick<
+      Card,
+      'front' | 'back' | 'exampleL1' | 'exampleL2' | 'exampleNote' | 'exampleSource' | 'exampleGeneratedAt'
+    >
+  >,
 ): Promise<void> {
   const db = await getDb();
   const now = nowMs();
@@ -123,12 +145,36 @@ export async function updateCard(
 
   const front = patch.front != null ? patch.front.trim() : current.front;
   const back = patch.back != null ? patch.back.trim() : current.back;
-  const example =
-    patch.example != null ? (patch.example.trim() ? patch.example.trim() : null) : current.example;
+  const exampleL1 =
+    patch.exampleL1 != null
+      ? (patch.exampleL1.trim() ? patch.exampleL1.trim() : null)
+      : current.exampleL1;
+  const exampleL2 =
+    patch.exampleL2 != null
+      ? (patch.exampleL2.trim() ? patch.exampleL2.trim() : null)
+      : current.exampleL2;
+  const exampleNote =
+    patch.exampleNote != null
+      ? (patch.exampleNote.trim() ? patch.exampleNote.trim() : null)
+      : current.exampleNote;
+  const exampleSource = patch.exampleSource !== undefined ? patch.exampleSource : current.exampleSource;
+  const exampleGeneratedAt =
+    patch.exampleGeneratedAt !== undefined ? patch.exampleGeneratedAt : current.exampleGeneratedAt;
 
   await db.runAsync(
-    'UPDATE cards SET front = ?, back = ?, example = ?, updatedAt = ? WHERE id = ?;',
-    [front, back, example, now, cardId],
+    `
+    UPDATE cards
+    SET front = ?,
+        back = ?,
+        exampleL1 = ?,
+        exampleL2 = ?,
+        exampleNote = ?,
+        exampleSource = ?,
+        exampleGeneratedAt = ?,
+        updatedAt = ?
+    WHERE id = ?;
+  `,
+    [front, back, exampleL1, exampleL2, exampleNote, exampleSource, exampleGeneratedAt, now, cardId],
   );
 }
 
@@ -206,35 +252,54 @@ export async function getCardKeySet(deckId: string): Promise<Set<string>> {
 
 export async function createManyCards(params: {
   deckId: string;
-  items: { front: string; back: string; example?: string | null }[];
-}): Promise<{ created: number }> {
+  items: {
+    id: string;
+    front: string;
+    back: string;
+    exampleL1?: string | null;
+    exampleL2?: string | null;
+    exampleNote?: string | null;
+    exampleSource?: ExampleSource | null;
+    exampleGeneratedAt?: number | null;
+  }[];
+}): Promise<{ created: number; createdIds: string[] }> {
   const db = await getDb();
   const now = nowMs();
   let created = 0;
+  const createdIds: string[] = [];
 
   await db.withExclusiveTransactionAsync(async (txn) => {
     const stmt = await txn.prepareAsync(
       `
       INSERT INTO cards (
-        id, deckId, front, back, example,
+        id, deckId, front, back,
+        exampleL1, exampleL2, exampleNote, exampleSource, exampleGeneratedAt,
         state, dueAt, intervalDays, ease, reps, lapses, learningStepIndex,
         createdAt, updatedAt, deletedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
     `,
     );
     try {
       for (const item of params.items) {
         const front = item.front.trim();
         const back = item.back.trim();
-        const example = item.example?.trim() || null;
+        const exampleL1 = item.exampleL1?.trim() || null;
+        const exampleL2 = item.exampleL2?.trim() || null;
+        const exampleNote = item.exampleNote?.trim() || null;
+        const exampleSource = item.exampleSource ?? null;
+        const exampleGeneratedAt = item.exampleGeneratedAt ?? null;
         if (!front || !back) continue;
 
         await stmt.executeAsync([
-          makeId(),
+          item.id,
           params.deckId,
           front,
           back,
-          example,
+          exampleL1,
+          exampleL2,
+          exampleNote,
+          exampleSource,
+          exampleGeneratedAt,
           'new',
           now, // dueAt: new cards are due immediately
           0, // intervalDays
@@ -246,11 +311,12 @@ export async function createManyCards(params: {
           now, // updatedAt
         ]);
         created++;
+        createdIds.push(item.id);
       }
     } finally {
       await stmt.finalizeAsync();
     }
   });
 
-  return { created };
+  return { created, createdIds };
 }

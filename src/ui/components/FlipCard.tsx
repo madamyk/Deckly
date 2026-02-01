@@ -9,6 +9,8 @@ import { useDecklyTheme } from '@/ui/theme/provider';
 export function FlipCard(props: {
   front: string;
   back: string;
+  frontFooter?: React.ReactNode;
+  backFooter?: React.ReactNode;
   flipped: boolean;
   onToggle: () => void;
 }) {
@@ -48,13 +50,11 @@ export function FlipCard(props: {
           ]}
         >
           <SurfaceCard style={[styles.card, ...baseCardStyle]}>
-            <View style={styles.topLabel}>
-              <Text variant="label" style={{ opacity: 0.8 }}>
-                Front
-              </Text>
-            </View>
-            <View style={styles.center}>
-              <Text style={styles.mainText}>{props.front}</Text>
+            <View style={styles.body}>
+              <View style={styles.center}>
+                <Text style={styles.mainText}>{props.front}</Text>
+              </View>
+              {props.frontFooter ? <View style={styles.footer}>{props.frontFooter}</View> : null}
             </View>
           </SurfaceCard>
         </Animated.View>
@@ -67,13 +67,11 @@ export function FlipCard(props: {
           ]}
         >
           <SurfaceCard style={[styles.card, ...baseCardStyle]}>
-            <View style={styles.topLabel}>
-              <Text variant="label" style={{ opacity: 0.8 }}>
-                Back
-              </Text>
-            </View>
-            <View style={styles.center}>
-              <Text style={styles.mainText}>{props.back}</Text>
+            <View style={styles.body}>
+              <View style={styles.center}>
+                <Text style={styles.mainText}>{props.back}</Text>
+              </View>
+              {props.backFooter ? <View style={styles.footer}>{props.backFooter}</View> : null}
             </View>
           </SurfaceCard>
         </Animated.View>
@@ -94,7 +92,7 @@ const styles = StyleSheet.create({
   },
   backFace: {},
   card: { flex: 1 },
-  topLabel: { paddingBottom: 4 },
+  body: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   mainText: {
     fontSize: 28,
@@ -102,4 +100,5 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
   },
+  footer: { paddingTop: 10 },
 });

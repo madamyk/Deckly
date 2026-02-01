@@ -1,9 +1,10 @@
 export type CardState = 'new' | 'learning' | 'review';
+export type ExampleSource = 'user' | 'ai';
 
 export type Deck = {
   id: string;
   name: string;
-  accentColor: string | null;
+  accentColor: string;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -14,7 +15,11 @@ export type Card = {
   deckId: string;
   front: string;
   back: string;
-  example: string | null;
+  exampleL1: string | null;
+  exampleL2: string | null;
+  exampleNote: string | null;
+  exampleSource: ExampleSource | null;
+  exampleGeneratedAt: number | null;
 
   state: CardState;
   dueAt: number;

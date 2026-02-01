@@ -1,10 +1,14 @@
 import { Stack, router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
-import type { Card } from '@/domain/models';
+import { getAiApiKey } from '@/data/secureStore';
+import type { Card, ExampleSource } from '@/domain/models';
+import { generateExamplePair } from '@/services/examplePairService';
+import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
 import { Pill } from '@/ui/components/Pill';
@@ -13,7 +17,7 @@ import { Screen } from '@/ui/components/Screen';
 import { Text } from '@/ui/components/Text';
 import { useKeyboardVisible } from '@/ui/hooks/useKeyboardVisible';
 import { useDecklyTheme } from '@/ui/theme/provider';
-import { formatShortDateTime } from '@/utils/time';
+import { formatShortDateTime, nowMs } from '@/utils/time';
 
 export function CardEditorScreen(props: {
   mode: 'create' | 'edit';
@@ -21,16 +25,52 @@ export function CardEditorScreen(props: {
   cardId?: string;
 }) {
   const t = useDecklyTheme();
+  const ai = usePrefsStore((s) => s.prefs.ai);
   const headerHeight = useHeaderHeight();
   const keyboardVisible = useKeyboardVisible();
   const [card, setCard] = useState<Card | null>(null);
   const [initialFront, setInitialFront] = useState('');
   const [initialBack, setInitialBack] = useState('');
-  const [initialExample, setInitialExample] = useState('');
+  const [initialExampleL1, setInitialExampleL1] = useState('');
+  const [initialExampleL2, setInitialExampleL2] = useState('');
+  const [initialExampleNote, setInitialExampleNote] = useState('');
+  const [initialExampleSource, setInitialExampleSource] = useState<ExampleSource | null>(null);
+  const [initialExampleGeneratedAt, setInitialExampleGeneratedAt] = useState<number | null>(null);
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
-  const [example, setExample] = useState('');
+  const [exampleL1, setExampleL1] = useState('');
+  const [exampleL2, setExampleL2] = useState('');
+  const [exampleNote, setExampleNote] = useState('');
+  const [exampleSource, setExampleSource] = useState<ExampleSource | null>(null);
+  const [exampleGeneratedAt, setExampleGeneratedAt] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [aiKeyPresent, setAiKeyPresent] = useState(false);
+  const progressTrackW = useSharedValue(0);
+  const progressT = useSharedValue(0);
+
+  useEffect(() => {
+    if (generating) {
+      progressT.value = withRepeat(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.cubic) }),
+        -1,
+        true,
+      );
+    } else {
+      progressT.value = 0;
+    }
+  }, [generating, progressT]);
+
+  const progressThumbStyle = useAnimatedStyle(() => {
+    const w = progressTrackW.value;
+    const seg = Math.max(24, w * 0.35);
+    const x = (w + seg) * progressT.value - seg;
+    return {
+      width: seg,
+      transform: [{ translateX: x }],
+    };
+  });
 
   const load = useCallback(async () => {
     if (props.mode !== 'edit' || !props.cardId) return;
@@ -38,23 +78,46 @@ export function CardEditorScreen(props: {
     setCard(c);
     const f = c?.front ?? '';
     const b = c?.back ?? '';
-    const e = c?.example ?? '';
+    const e1 = c?.exampleL1 ?? '';
+    const e2 = c?.exampleL2 ?? '';
+    const en = c?.exampleNote ?? '';
     setInitialFront(f);
     setInitialBack(b);
-    setInitialExample(e);
+    setInitialExampleL1(e1);
+    setInitialExampleL2(e2);
+    setInitialExampleNote(en);
+    setInitialExampleSource(c?.exampleSource ?? null);
+    setInitialExampleGeneratedAt(c?.exampleGeneratedAt ?? null);
     setFront(f);
     setBack(b);
-    setExample(e);
+    setExampleL1(e1);
+    setExampleL2(e2);
+    setExampleNote(en);
+    setExampleSource(c?.exampleSource ?? null);
+    setExampleGeneratedAt(c?.exampleGeneratedAt ?? null);
   }, [props.mode, props.cardId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    (async () => {
+      const k = await getAiApiKey();
+      setAiKeyPresent(!!k);
+    })();
+  }, []);
+
   const isDirty =
     props.mode === 'create'
-      ? front.length > 0 || back.length > 0 || example.length > 0
-      : front !== initialFront || back !== initialBack || example !== initialExample;
+      ? front.length > 0 || back.length > 0 || exampleL1.length > 0 || exampleL2.length > 0 || exampleNote.length > 0
+      : front !== initialFront ||
+        back !== initialBack ||
+        exampleL1 !== initialExampleL1 ||
+        exampleL2 !== initialExampleL2 ||
+        exampleNote !== initialExampleNote ||
+        exampleSource !== initialExampleSource ||
+        exampleGeneratedAt !== initialExampleGeneratedAt;
   const canSave = !saving && isDirty && front.trim().length > 0 && back.trim().length > 0;
 
   async function save() {
@@ -66,18 +129,75 @@ export function CardEditorScreen(props: {
     }
     setSaving(true);
     try {
+      const e1 = exampleL1.trim() ? exampleL1.trim() : null;
+      const e2 = exampleL2.trim() ? exampleL2.trim() : null;
+      const en = exampleNote.trim() ? exampleNote.trim() : null;
+      const hasAnyExample = !!(e1 || e2 || en);
+      const source: ExampleSource | null = hasAnyExample ? (exampleSource ?? 'user') : null;
+      const generatedAt = source === 'ai' ? exampleGeneratedAt ?? nowMs() : null;
+
       if (props.mode === 'create') {
-        await cardsRepo.createCard({ deckId: props.deckId, front: f, back: b, example });
+        await cardsRepo.createCard({
+          deckId: props.deckId,
+          front: f,
+          back: b,
+          exampleL1: e1,
+          exampleL2: e2,
+          exampleNote: en,
+          exampleSource: source,
+          exampleGeneratedAt: generatedAt,
+        });
         router.back();
       } else {
         if (!props.cardId) return;
-        await cardsRepo.updateCard(props.cardId, { front: f, back: b, example });
+        await cardsRepo.updateCard(props.cardId, {
+          front: f,
+          back: b,
+          exampleL1: e1,
+          exampleL2: e2,
+          exampleNote: en,
+          exampleSource: source,
+          exampleGeneratedAt: generatedAt,
+        });
         router.back();
       }
     } catch (e: any) {
       Alert.alert('Deckly', e?.message ?? 'Failed to save card.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function generate() {
+    const f = front.trim();
+    const b = back.trim();
+    if (!f || !b) {
+      Alert.alert('Deckly', 'Fill in Front and Back first.');
+      return;
+    }
+    if (!ai.enabled) {
+      Alert.alert('Deckly', 'AI Assist is turned off. Enable it in Settings.');
+      router.push('/settings/ai');
+      return;
+    }
+    if (!aiKeyPresent) {
+      Alert.alert('Deckly', 'To generate examples, add your OpenAI API key in Settings.');
+      router.push('/settings/ai');
+      return;
+    }
+    setGenError(null);
+    setGenerating(true);
+    try {
+      const { patch } = await generateExamplePair({ deckId: props.deckId, frontText: f, backText: b });
+      setExampleL1(patch.exampleL1 ?? '');
+      setExampleL2(patch.exampleL2 ?? '');
+      setExampleNote(patch.exampleNote ?? '');
+      setExampleSource('ai');
+      setExampleGeneratedAt(patch.exampleGeneratedAt ?? nowMs());
+    } catch (e: any) {
+      setGenError(e?.message ?? 'Failed to generate example.');
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -114,13 +234,111 @@ export function CardEditorScreen(props: {
           <View style={{ gap: 14 }}>
             <Input label="Front" value={front} onChangeText={setFront} placeholder="Prompt..." />
             <Input label="Back" value={back} onChangeText={setBack} placeholder="Answer..." />
+            <View style={{ gap: 10 }}>
+              <Button
+                title={generating ? 'Generating...' : 'Generate example pair'}
+                variant="secondary"
+                onPress={generate}
+                disabled={generating || !ai.enabled || !aiKeyPresent}
+              />
+              {generating ? (
+                <View style={{ gap: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <ActivityIndicator color={t.colors.textMuted} />
+                    <Text variant="muted">Generating example pair…</Text>
+                  </View>
+                  <View style={{ borderRadius: 999, backgroundColor: t.colors.border, padding: 1 }}>
+                    <View
+                      style={{
+                        height: 8,
+                        borderRadius: 999,
+                        backgroundColor: t.colors.surface2,
+                        overflow: 'hidden',
+                      }}
+                      onLayout={(e) => {
+                        progressTrackW.value = e.nativeEvent.layout.width;
+                      }}
+                    >
+                      <Animated.View
+                        style={[
+                          {
+                            height: '100%',
+                            borderRadius: 999,
+                            backgroundColor: t.colors.primary2,
+                          },
+                          progressThumbStyle,
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+              ) : genError ? (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{genError}</Text>
+                  <Pressable
+                    onPress={() => router.push('/settings/ai-debug')}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                    hitSlop={8}
+                  >
+                    <Text variant="muted" style={{ textDecorationLine: 'underline' }}>
+                      View AI debug logs
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text variant="muted">
+                  Generates Example front/back using detected deck languages. Saved for offline review.
+                </Text>
+              )}
+              {!ai.enabled ? (
+                <Text
+                  style={{ color: t.colors.textMuted, fontWeight: '700' }}
+                  onPress={() => router.push('/settings/ai')}
+                >
+                  AI Assist is off. Enable it in Settings.
+                </Text>
+              ) : !aiKeyPresent ? (
+                <Text
+                  style={{ color: t.colors.textMuted, fontWeight: '700' }}
+                  onPress={() => router.push('/settings/ai')}
+                >
+                  Add an API key in Settings to enable generation.
+                </Text>
+              ) : null}
+            </View>
+
             <Input
-              label="Example"
-              value={example}
-              onChangeText={setExample}
-              placeholder="Optional example..."
+              label="Example front"
+              value={exampleL1}
+              onChangeText={(v) => {
+                setExampleL1(v);
+                if (!exampleSource) setExampleSource('user');
+              }}
+              placeholder="Optional example shown on the front side..."
               multiline
-              style={{ minHeight: 90, textAlignVertical: 'top' }}
+              style={{ minHeight: 70, textAlignVertical: 'top' }}
+            />
+            <Input
+              label="Example back"
+              value={exampleL2}
+              onChangeText={(v) => {
+                setExampleL2(v);
+                if (!exampleSource) setExampleSource('user');
+              }}
+              placeholder="Optional example shown on the back side..."
+              multiline
+              style={{ minHeight: 70, textAlignVertical: 'top' }}
+            />
+            <Input
+              label="Note (optional)"
+              value={exampleNote}
+              onChangeText={(v) => {
+                setExampleNote(v);
+                if (!exampleSource) setExampleSource('user');
+              }}
+              placeholder="Optional pitfall / regional note..."
+              multiline
+              style={{ minHeight: 60, textAlignVertical: 'top' }}
             />
 
             <View style={{ height: 2 }} />

@@ -9,7 +9,11 @@ function baseCard(overrides: Partial<Card>): Card {
     deckId: 'd1',
     front: 'front',
     back: 'back',
-    example: null,
+    exampleL1: null,
+    exampleL2: null,
+    exampleNote: null,
+    exampleSource: null,
+    exampleGeneratedAt: null,
     state: 'new',
     dueAt: NOW,
     intervalDays: 0,
@@ -98,4 +102,3 @@ describe('schedule()', () => {
     expect(p.intervalDays).toBeGreaterThan(10);
   });
 });
-

@@ -26,7 +26,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [name, setName] = useState('');
-  const [accentKey, setAccentKey] = useState<string | null>(null);
+  const [accentKey, setAccentKey] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {

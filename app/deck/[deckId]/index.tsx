@@ -21,11 +21,26 @@ import { formatDueRelative, nowMs } from '@/utils/time';
 export default function DeckScreen() {
   const t = useDecklyTheme();
   const insets = useSafeAreaInsets();
-  const { deckId, imported, skippedInvalid, skippedDuplicates } = useLocalSearchParams<{
+  const {
+    deckId,
+    imported,
+    skippedInvalid,
+    skippedDuplicates,
+    examplesTotal,
+    examplesDone,
+    examplesFailed,
+    examplesCancelled,
+    examplesFailureSummary,
+  } = useLocalSearchParams<{
     deckId: string;
     imported?: string;
     skippedInvalid?: string;
     skippedDuplicates?: string;
+    examplesTotal?: string;
+    examplesDone?: string;
+    examplesFailed?: string;
+    examplesCancelled?: string;
+    examplesFailureSummary?: string;
   }>();
 
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -86,10 +101,27 @@ export default function DeckScreen() {
     const created = Number(imported || 0);
     const invalid = Number(skippedInvalid || 0);
     const dupes = Number(skippedDuplicates || 0);
+    const exTotal = Number(examplesTotal || 0);
+    const exDone = Number(examplesDone || 0);
+    const exFailed = Number(examplesFailed || 0);
+    const exCancelled = Number(examplesCancelled || 0);
 
     const details: string[] = [];
     if (invalid) details.push(`Skipped (invalid): ${invalid}`);
     if (dupes) details.push(`Skipped (duplicates): ${dupes}`);
+    if (exTotal) {
+      const genLine = exCancelled
+        ? exFailed
+          ? `Examples: cancelled at ${exDone}/${exTotal} (failed ${exFailed})`
+          : `Examples: cancelled at ${exDone}/${exTotal}`
+        : exFailed
+          ? `Examples: generated ${exTotal - exFailed}/${exTotal} (failed ${exFailed})`
+          : `Examples: generated ${exTotal}/${exTotal}`;
+      details.push(genLine);
+      if (exFailed && examplesFailureSummary) {
+        details.push(`Failures: ${examplesFailureSummary}`);
+      }
+    }
 
     Alert.alert(
       'Import complete',
@@ -103,8 +135,22 @@ export default function DeckScreen() {
       imported: undefined,
       skippedInvalid: undefined,
       skippedDuplicates: undefined,
+      examplesTotal: undefined,
+      examplesDone: undefined,
+      examplesFailed: undefined,
+      examplesCancelled: undefined,
+      examplesFailureSummary: undefined,
     });
-  }, [imported, skippedInvalid, skippedDuplicates]);
+  }, [
+    imported,
+    skippedInvalid,
+    skippedDuplicates,
+    examplesTotal,
+    examplesDone,
+    examplesFailed,
+    examplesCancelled,
+    examplesFailureSummary,
+  ]);
 
   const headerRight = useMemo(
     () => () => (
@@ -130,6 +176,23 @@ export default function DeckScreen() {
     [openAddMenu, t.colors.text],
   );
 
+  const headerLeft = useMemo(
+    () => () => (
+      <Pressable
+        hitSlop={10}
+        onPress={() => router.back()}
+        style={({ pressed }) => ({
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <Ionicons name="chevron-back" size={24} color={t.colors.text} />
+      </Pressable>
+    ),
+    [t.colors.text],
+  );
+
   const dueCount = stats?.due ?? 0;
   const totalCount = stats?.total ?? 0;
   const hasCards = totalCount > 0;
@@ -150,7 +213,7 @@ export default function DeckScreen() {
 
   return (
     <Screen padded={false} edges={['left', 'right']}>
-      <Stack.Screen options={{ title: deck.name, headerRight }} />
+      <Stack.Screen options={{ title: deck.name, headerLeft, headerRight }} />
 
       <View
         style={{

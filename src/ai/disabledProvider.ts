@@ -14,5 +14,7 @@ export const disabledAiAssistProvider: AiAssistProvider = {
   async generateExample() {
     throw new AiAssistDisabledError();
   },
+  async generateExamplePair() {
+    throw new AiAssistDisabledError();
+  },
 };
-

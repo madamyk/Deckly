@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-// Reserved for future AI Assist support (do not use in MVP).
+// Stored locally on-device, never logged. Used for optional BYO OpenAI API key.
 const KEY_AI_API_KEY = 'deckly.ai.apiKey';
 
 export async function getAiApiKey(): Promise<string | null> {
@@ -22,4 +22,3 @@ export async function setAiApiKey(value: string | null): Promise<void> {
     // Ignore in MVP; surface errors when feature is enabled.
   }
 }
-

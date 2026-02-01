@@ -8,7 +8,7 @@ function mapDeckRow(row: any): Deck {
   return {
     id: String(row.id),
     name: String(row.name),
-    accentColor: row.accentColor == null ? null : String(row.accentColor),
+    accentColor: String(row.accentColor),
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
     deletedAt: row.deletedAt == null ? null : Number(row.deletedAt),

@@ -9,7 +9,6 @@ import type { Card } from '@/domain/models';
 import type { Rating } from '@/domain/ratings';
 import { schedule } from '@/domain/scheduling/schedule';
 import { Button } from '@/ui/components/Button';
-import { Collapsible } from '@/ui/components/Collapsible';
 import { EmptyState } from '@/ui/components/EmptyState';
 import { FlipCard } from '@/ui/components/FlipCard';
 import { Pill } from '@/ui/components/Pill';
@@ -21,15 +20,18 @@ import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
 import { softHaptic, successHaptic } from '@/ui/haptics';
 import { nowMs } from '@/utils/time';
 import { useDecklyTheme } from '@/ui/theme/provider';
+import { usePrefsStore } from '@/stores/prefsStore';
 
 export default function ReviewScreen() {
   const t = useDecklyTheme();
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
+  const { prefs } = usePrefsStore();
 
   const [queue, setQueue] = useState<Card[]>([]);
   const [index, setIndex] = useState(0);
   const [flippedId, setFlippedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [examplesEnabled, setExamplesEnabled] = useState(true);
   const [history, setHistory] = useState<
     {
       cardId: string;
@@ -63,6 +65,11 @@ export default function ReviewScreen() {
 
   const current = queue[index] ?? null;
   const flipped = !!current && flippedId === current.id;
+  const frontExampleVisible =
+    !!current && examplesEnabled && prefs.review.showExamplesOnFront && !!current.exampleL1?.trim();
+  const backExampleVisible =
+    !!current && examplesEnabled && prefs.review.showExamplesOnBack && !!current.exampleL2?.trim();
+  const note = current?.exampleNote?.trim() ? current.exampleNote.trim() : null;
   const progress = useMemo(() => {
     if (!queue.length) return '0/0';
     return `${Math.min(index + 1, queue.length)}/${queue.length}`;
@@ -129,8 +136,28 @@ export default function ReviewScreen() {
     }
   }
 
-  const headerRight = history.length
-    ? () => (
+  const headerRight = () => (
+    <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+      <Pressable
+        onPress={() => {
+          softHaptic();
+          setExamplesEnabled((v) => !v);
+        }}
+        hitSlop={12}
+        style={({ pressed }) => ({
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <Ionicons
+          name={examplesEnabled ? 'eye-outline' : 'eye-off-outline'}
+          size={20}
+          color={t.colors.textMuted}
+        />
+      </Pressable>
+
+      {history.length ? (
         <Pressable
           disabled={loading}
           onPress={() => {
@@ -146,8 +173,9 @@ export default function ReviewScreen() {
         >
           <Ionicons name="time-outline" size={20} color={t.colors.textMuted} />
         </Pressable>
-      )
-    : undefined;
+      ) : null}
+    </Row>
+  );
 
   if (!queue.length) {
     return (
@@ -213,6 +241,24 @@ export default function ReviewScreen() {
         <FlipCard
           front={current.front}
           back={current.back}
+          frontFooter={
+            frontExampleVisible ? (
+              <ExampleFooter
+                key={`${current.id}:front`}
+                text={current.exampleL1!.trim()}
+                collapsedByDefault={prefs.review.examplesCollapsedByDefault}
+              />
+            ) : null
+          }
+          backFooter={
+            backExampleVisible ? (
+              <ExampleFooter
+                key={`${current.id}:back`}
+                text={current.exampleL2!.trim()}
+                collapsedByDefault={prefs.review.examplesCollapsedByDefault}
+              />
+            ) : null
+          }
           flipped={flipped}
           onToggle={() =>
             setFlippedId((prev) => (prev === current.id ? null : current.id))
@@ -221,12 +267,7 @@ export default function ReviewScreen() {
 
         {flipped ? (
           <>
-            <View style={{ height: 12 }} />
-            <Collapsible title="Example">
-              <Text variant="muted">{current.example?.trim() || 'No example for this card.'}</Text>
-            </Collapsible>
-
-            <View style={{ height: 14 }} />
+            <View style={{ height: 16 }} />
 
             <View style={{ gap: 10 }}>
               <Row gap={10} style={{ justifyContent: 'space-between' }}>
@@ -266,11 +307,75 @@ export default function ReviewScreen() {
                 </View>
               </Row>
             </View>
+
+            {note ? (
+              <View
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 16,
+                  backgroundColor: t.colors.surface2,
+                }}
+              >
+                <Row gap={8} style={{ justifyContent: 'center', alignItems: 'center' }}>
+                  <Ionicons name="information-circle-outline" size={16} color={t.colors.textMuted} />
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontSize: 13,
+                      lineHeight: 18,
+                      fontWeight: '600',
+                      color: t.colors.textMuted,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {note}
+                  </Text>
+                </Row>
+              </View>
+            ) : null}
           </>
         ) : (
-          <View style={{ height: 8 }} />
+          <>
+            <View style={{ height: 8 }} />
+          </>
         )}
       </Animated.View>
     </Screen>
+  );
+}
+
+function ExampleFooter(props: {
+  text: string;
+  collapsedByDefault: boolean;
+}) {
+  const t = useDecklyTheme();
+  const [open, setOpen] = useState(!props.collapsedByDefault);
+
+  return (
+    <Pressable
+      onPress={() => setOpen((v) => !v)}
+      hitSlop={8}
+      style={({ pressed }) => ({
+        paddingTop: 12,
+        opacity: pressed ? 0.85 : 1,
+      })}
+    >
+      <View style={{ alignItems: 'center', gap: 6 }}>
+        <Text
+          style={{
+            fontSize: 13,
+            lineHeight: 18,
+            fontWeight: '600',
+            color: t.colors.textMuted,
+            textAlign: 'center',
+            maxWidth: 320,
+          }}
+          numberOfLines={open ? 0 : 1}
+        >
+          {props.text}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
