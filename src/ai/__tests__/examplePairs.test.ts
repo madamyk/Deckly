@@ -7,8 +7,7 @@ describe('buildExamplePrompt()', () => {
       backText: 'to run',
       front_language: 'Spanish',
       back_language: 'English',
-      level: 'B1',
-      domain: 'daily',
+      level: 'medium',
     });
 
     expect(p).toContain('front_language: Spanish');
@@ -25,8 +24,7 @@ describe('buildExamplePrompt()', () => {
       backText: 'to run',
       front_language: 'Spanish',
       back_language: 'English',
-      level: 'B1',
-      domain: 'daily',
+      level: 'medium',
       seedExampleFront: 'Yo corro hoy.',
       seedExampleBack: null,
     });

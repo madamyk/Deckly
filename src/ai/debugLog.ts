@@ -5,12 +5,16 @@ import { nowMs } from '@/utils/time';
 export type AiDebugEntry = {
   id: string;
   at: number; // unix ms
-  kind: 'example_pair' | 'language_pair';
+  kind: 'example_pair' | 'language_pair' | 'chat';
   mode: 'single' | 'bulk_missing' | 'bulk_all';
+  success?: boolean;
   cardId?: string;
   front?: string;
   back?: string;
   model?: string;
+  durationMs?: number;
+  processingMs?: number;
+  requestId?: string;
   errorCode?: string;
   errorMessage?: string;
   status?: number;
@@ -50,12 +54,21 @@ export async function listAiDebugEntries(): Promise<AiDebugEntry[]> {
     .map((e) => ({
       id: String(e.id ?? makeId()),
       at: Number(e.at ?? 0),
-      kind: e.kind === 'language_pair' ? ('language_pair' as const) : ('example_pair' as const),
+      kind:
+        e.kind === 'language_pair'
+          ? ('language_pair' as const)
+          : e.kind === 'chat'
+            ? ('chat' as const)
+            : ('example_pair' as const),
       mode: e.mode === 'single' || e.mode === 'bulk_missing' || e.mode === 'bulk_all' ? e.mode : 'single',
+      success: typeof e.success === 'boolean' ? e.success : undefined,
       cardId: typeof e.cardId === 'string' ? e.cardId : undefined,
       front: typeof e.front === 'string' ? e.front : undefined,
       back: typeof e.back === 'string' ? e.back : undefined,
       model: typeof e.model === 'string' ? e.model : undefined,
+      durationMs: typeof e.durationMs === 'number' ? e.durationMs : undefined,
+      processingMs: typeof e.processingMs === 'number' ? e.processingMs : undefined,
+      requestId: typeof e.requestId === 'string' ? e.requestId : undefined,
       errorCode: typeof e.errorCode === 'string' ? e.errorCode : undefined,
       errorMessage: typeof e.errorMessage === 'string' ? e.errorMessage : undefined,
       status: typeof e.status === 'number' ? e.status : undefined,
@@ -74,10 +87,14 @@ export async function appendAiDebugEntry(entry: Omit<AiDebugEntry, 'id' | 'at'> 
       at: entry.at ?? nowMs(),
       kind: entry.kind,
       mode: entry.mode,
+      success: entry.success,
       cardId: entry.cardId,
       front: trimTo(entry.front, 200),
       back: trimTo(entry.back, 200),
       model: trimTo(entry.model, 80),
+      durationMs: typeof entry.durationMs === 'number' ? entry.durationMs : undefined,
+      processingMs: typeof entry.processingMs === 'number' ? entry.processingMs : undefined,
+      requestId: trimTo(entry.requestId, 120),
       errorCode: trimTo(entry.errorCode, 80),
       errorMessage: trimTo(entry.errorMessage, 400),
       status: entry.status,

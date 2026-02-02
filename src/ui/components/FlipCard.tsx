@@ -81,7 +81,7 @@ export function FlipCard(props: {
 }
 
 const styles = StyleSheet.create({
-  stage: { width: '100%', height: 320 },
+  stage: { width: '100%', height: 300 },
   face: {
     position: 'absolute',
     left: 0,
@@ -92,13 +92,13 @@ const styles = StyleSheet.create({
   },
   backFace: {},
   card: { flex: 1 },
-  body: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  body: { flex: 1, position: 'relative' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
   mainText: {
     fontSize: 28,
     lineHeight: 36,
     fontWeight: '900',
     textAlign: 'center',
   },
-  footer: { paddingTop: 10 },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 10 },
 });

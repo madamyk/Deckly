@@ -12,9 +12,10 @@ type Props = TextInputProps & {
    * Moves the caret to the end on focus, without selecting the whole value.
    */
   cursorAtEndOnFocus?: boolean;
+  placeholderLines?: number;
 };
 
-export function Input({ label, hint, cursorAtEndOnFocus, style, ...rest }: Props) {
+export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style, ...rest }: Props) {
   const t = useDecklyTheme();
   const [focused, setFocused] = useState(false);
   const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(
@@ -70,10 +71,12 @@ export function Input({ label, hint, cursorAtEndOnFocus, style, ...rest }: Props
               styles.placeholder,
               {
                 color: t.colors.textMuted,
-                opacity: focused ? 0.55 : 0.7,
+                opacity: focused ? 0.35 : 0.55,
               },
               rest.multiline && { top: 12 },
             ]}
+            numberOfLines={placeholderLines}
+            ellipsizeMode={placeholderLines === 1 ? 'tail' : undefined}
           >
             {rest.placeholder}
           </Text>
@@ -100,6 +103,6 @@ const styles = StyleSheet.create({
     top: 12,
     fontSize: 16,
     lineHeight: 20,
-    fontWeight: '500',
+    fontWeight: '400',
   },
 });

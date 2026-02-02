@@ -10,10 +10,10 @@ module.exports = () => {
 
   return {
     ...base,
+    owner: 'madamyk',
     extra: {
       ...(base.extra ?? {}),
       devOpenAiApiKey,
     },
   };
 };
-

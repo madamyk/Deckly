@@ -6,11 +6,14 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTim
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
 import { getAiApiKey } from '@/data/secureStore';
+import { getExampleLevel } from '@/data/repositories/deckPrefsRepo';
 import type { Card, ExampleSource } from '@/domain/models';
+import type { AiExampleLevel } from '@/domain/prefs';
 import { generateExamplePair } from '@/services/examplePairService';
 import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
+import { LevelPicker } from '@/ui/components/LevelPicker';
 import { Pill } from '@/ui/components/Pill';
 import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
 import { Screen } from '@/ui/components/Screen';
@@ -47,6 +50,7 @@ export function CardEditorScreen(props: {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [aiKeyPresent, setAiKeyPresent] = useState(false);
+  const [exampleLevel, setExampleLevel] = useState<AiExampleLevel>(ai.level);
   const progressTrackW = useSharedValue(0);
   const progressT = useSharedValue(0);
 
@@ -100,6 +104,14 @@ export function CardEditorScreen(props: {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    (async () => {
+      const level = await getExampleLevel(props.deckId);
+      if (level) setExampleLevel(level);
+      else setExampleLevel(ai.level);
+    })();
+  }, [props.deckId, ai.level]);
 
   useEffect(() => {
     (async () => {
@@ -168,7 +180,7 @@ export function CardEditorScreen(props: {
     }
   }
 
-  async function generate() {
+  async function generateConfirmed() {
     const f = front.trim();
     const b = back.trim();
     if (!f || !b) {
@@ -188,7 +200,12 @@ export function CardEditorScreen(props: {
     setGenError(null);
     setGenerating(true);
     try {
-      const { patch } = await generateExamplePair({ deckId: props.deckId, frontText: f, backText: b });
+      const { patch } = await generateExamplePair({
+        deckId: props.deckId,
+        frontText: f,
+        backText: b,
+        levelOverride: exampleLevel,
+      });
       setExampleL1(patch.exampleL1 ?? '');
       setExampleL2(patch.exampleL2 ?? '');
       setExampleNote(patch.exampleNote ?? '');
@@ -199,6 +216,17 @@ export function CardEditorScreen(props: {
     } finally {
       setGenerating(false);
     }
+  }
+
+  function generate() {
+    Alert.alert(
+      'Generate content?',
+      'This will overwrite the current examples and note for this card.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Generate', onPress: generateConfirmed },
+      ],
+    );
   }
 
   async function del() {
@@ -235,8 +263,12 @@ export function CardEditorScreen(props: {
             <Input label="Front" value={front} onChangeText={setFront} placeholder="Prompt..." />
             <Input label="Back" value={back} onChangeText={setBack} placeholder="Answer..." />
             <View style={{ gap: 10 }}>
+              <View style={{ gap: 6 }}>
+                <Text variant="label">Example level</Text>
+                <LevelPicker value={exampleLevel} onChange={setExampleLevel} />
+              </View>
               <Button
-                title={generating ? 'Generating...' : 'Generate example pair'}
+                title={generating ? 'Generating...' : 'Generate content'}
                 variant="secondary"
                 onPress={generate}
                 disabled={generating || !ai.enabled || !aiKeyPresent}
@@ -245,7 +277,7 @@ export function CardEditorScreen(props: {
                 <View style={{ gap: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <ActivityIndicator color={t.colors.textMuted} />
-                    <Text variant="muted">Generating example pair…</Text>
+                    <Text variant="muted">Generating content…</Text>
                   </View>
                   <View style={{ borderRadius: 999, backgroundColor: t.colors.border, padding: 1 }}>
                     <View
@@ -287,7 +319,7 @@ export function CardEditorScreen(props: {
                 </View>
               ) : (
                 <Text variant="muted">
-                  Generates Example front/back using detected deck languages. Saved for offline review.
+                  Generates example front/back using detected deck languages.
                 </Text>
               )}
               {!ai.enabled ? (

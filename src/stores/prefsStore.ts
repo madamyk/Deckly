@@ -36,18 +36,11 @@ function mergePrefs(partial: any): AppPrefs {
       provider: 'openai',
       model: typeof p?.ai?.model === 'string' && p.ai.model.trim() ? p.ai.model.trim() : DEFAULT_PREFS.ai.model,
       level:
-        p?.ai?.level === 'A1' ||
-        p?.ai?.level === 'A2' ||
-        p?.ai?.level === 'B1' ||
-        p?.ai?.level === 'B2' ||
-        p?.ai?.level === 'C1' ||
-        p?.ai?.level === 'C2'
+        p?.ai?.level === 'easy' ||
+        p?.ai?.level === 'medium' ||
+        p?.ai?.level === 'advanced'
           ? p.ai.level
           : DEFAULT_PREFS.ai.level,
-      domain:
-        p?.ai?.domain === 'daily' || p?.ai?.domain === 'travel' || p?.ai?.domain === 'work' || p?.ai?.domain === 'neutral'
-          ? p.ai.domain
-          : DEFAULT_PREFS.ai.domain,
     },
   };
 }

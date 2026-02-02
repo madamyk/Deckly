@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInRight, FadeOutLeft, FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -14,7 +14,6 @@ import { FlipCard } from '@/ui/components/FlipCard';
 import { Pill } from '@/ui/components/Pill';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
-import { StrengthDots } from '@/ui/components/StrengthDots';
 import { Text } from '@/ui/components/Text';
 import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
 import { softHaptic, successHaptic } from '@/ui/haptics';
@@ -33,6 +32,9 @@ export default function ReviewScreen() {
   const [loading, setLoading] = useState(false);
   const [examplesEnabled, setExamplesEnabled] = useState(true);
   const [animateExamples, setAnimateExamples] = useState(false);
+  const resumeRef = useRef(false);
+  const currentIdRef = useRef<string | null>(null);
+  const flippedRef = useRef(false);
   const [history, setHistory] = useState<
     {
       cardId: string;
@@ -50,9 +52,20 @@ export default function ReviewScreen() {
     }[]
   >([]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { preserve?: boolean }) => {
+    const preserve = !!opts?.preserve;
+    const prevId = preserve ? currentIdRef.current : null;
+    const prevFlipped = preserve ? flippedRef.current : false;
     const cards = await cardsRepo.getDueCards({ deckId, now: nowMs(), limit: 50 });
     setQueue(cards);
+    if (preserve && prevId) {
+      const nextIndex = cards.findIndex((c) => c.id === prevId);
+      if (nextIndex >= 0) {
+        setIndex(nextIndex);
+        setFlippedId(prevFlipped ? prevId : null);
+        return;
+      }
+    }
     setIndex(0);
     setFlippedId(null);
     setHistory([]);
@@ -60,7 +73,9 @@ export default function ReviewScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      const preserve = resumeRef.current;
+      resumeRef.current = false;
+      load({ preserve });
     }, [load]),
   );
 
@@ -69,6 +84,11 @@ export default function ReviewScreen() {
     const id = setTimeout(() => setAnimateExamples(false), 300);
     return () => clearTimeout(id);
   }, [animateExamples]);
+
+  useEffect(() => {
+    currentIdRef.current = current?.id ?? null;
+    flippedRef.current = !!current && flippedId === current.id;
+  }, [current, flippedId]);
 
   const current = queue[index] ?? null;
   const flipped = !!current && flippedId === current.id;
@@ -261,7 +281,6 @@ export default function ReviewScreen() {
             {progress}
           </Text>
           <Row gap={10} style={{ justifyContent: 'flex-end' }}>
-            {current.state !== 'new' ? <StrengthDots card={current} /> : null}
             <Pill
               label={cardStateLabel(current.state)}
               tone={cardStateTone(current.state)}
@@ -344,6 +363,20 @@ export default function ReviewScreen() {
               </Row>
             </View>
 
+            <View style={{ height: 10 }} />
+            <Button
+              title="Ask about this card"
+              variant="secondary"
+              left={<Ionicons name="chatbubble-ellipses-outline" size={18} color={t.colors.text} />}
+              onPress={() => {
+                resumeRef.current = true;
+                router.push({
+                  pathname: '/deck/[deckId]/review/chat/[cardId]',
+                  params: { deckId, cardId: current.id },
+                });
+              }}
+            />
+
             {noteVisible ? (
               <Animated.View
                 entering={noteAnimate ? FadeInDown.duration(140) : undefined}
@@ -362,18 +395,25 @@ export default function ReviewScreen() {
                     color={t.colors.textMuted}
                     style={{ marginTop: 2 }}
                   />
-                  <Text
-                    style={{
-                      flex: 1,
-                      fontSize: 13,
-                      lineHeight: 18,
-                      fontWeight: '500',
-                      color: t.colors.textMuted,
-                      textAlign: 'left',
-                    }}
-                  >
-                    {note}
-                  </Text>
+                  <View style={{ flex: 1, maxHeight: 140 }}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                      contentContainerStyle={{ paddingRight: 4 }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          lineHeight: 18,
+                          fontWeight: '400',
+                          color: t.colors.textMuted,
+                          textAlign: 'left',
+                        }}
+                      >
+                        {note}
+                      </Text>
+                    </ScrollView>
+                  </View>
                 </Row>
               </Animated.View>
             ) : null}
@@ -409,12 +449,12 @@ function ExampleFooter(props: {
           style={{
             fontSize: 13,
             lineHeight: 18,
-            fontWeight: '600',
+            fontWeight: '400',
             color: t.colors.textMuted,
             textAlign: 'center',
             maxWidth: 320,
           }}
-          numberOfLines={open ? 0 : 2}
+          numberOfLines={open ? 0 : 4}
         >
           {props.text}
         </Text>

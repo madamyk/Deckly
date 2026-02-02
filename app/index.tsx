@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getDeckStats } from '@/data/repositories/decksRepo';
 import type { DeckStats } from '@/domain/models';
@@ -19,6 +20,7 @@ export default function HomeScreen() {
   const t = useDecklyTheme();
   const { decks, loading, error, refresh } = useDecksStore();
   const [statsByDeckId, setStatsByDeckId] = useState<Record<string, DeckStats>>({});
+  const insets = useSafeAreaInsets();
 
   const formatDue = (n: number) => {
     if (n > 999) return '999+';
@@ -59,63 +61,52 @@ export default function HomeScreen() {
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Row style={{ marginBottom: t.spacing.xl, alignItems: 'flex-end' }}>
-        <View style={{ flex: 1 }}>
+      <View style={{ marginBottom: t.spacing.lg, gap: 10 }}>
+        <Row style={{ alignItems: 'center' }}>
           <Text variant="title">Deckly</Text>
-          <View style={{ height: 6 }} />
-          <Text variant="muted">
-            Offline-first flashcards with spaced repetition, plus optional AI-generated example pairs
-            you can save and review later.
-          </Text>
-        </View>
-        <Pressable
-          hitSlop={10}
-          onPress={() => router.push('/settings')}
+          <Pressable
+            hitSlop={10}
+            onPress={() => router.push('/settings')}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 10,
+              borderRadius: 16,
+              backgroundColor: t.colors.surface2,
+              borderWidth: 1,
+              borderColor: t.colors.border,
+            }}
+          >
+            <Ionicons name="settings-outline" size={20} color={t.colors.text} />
+          </Pressable>
+        </Row>
+        <Text
+          variant="muted"
           style={{
-            paddingHorizontal: 10,
-            paddingVertical: 10,
-            borderRadius: 16,
-            backgroundColor: t.colors.surface2,
-            borderWidth: 1,
-            borderColor: t.colors.border,
+            fontSize: 14,
+            lineHeight: 22,
+            fontWeight: '400',
+            maxWidth: 320,
           }}
         >
-          <Ionicons name="settings-outline" size={20} color={t.colors.text} />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/deck/new')}
-          style={{
-            backgroundColor: t.colors.primary,
-            borderRadius: 16,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            borderWidth: 1,
-            borderColor: 'transparent',
-          }}
-        >
-          <Row gap={8} style={{ justifyContent: 'center' }}>
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '900' }}>New</Text>
-          </Row>
-        </Pressable>
-      </Row>
+          Offline-first flashcards with spaced repetition, plus optional AI-generated example pairs
+          you can save and review later.
+        </Text>
+      </View>
 
       {decks.length === 0 && !loading ? (
         <EmptyState
           title="No decks yet"
           message="Create your first deck, import a CSV, and start reviewing."
-          actionTitle="Create a deck"
-          onAction={() => router.push('/deck/new')}
         />
       ) : (
         <FlatList
           data={decks}
           keyExtractor={(d) => d.id}
-          contentContainerStyle={{ paddingTop: 6, paddingBottom: 24 }}
+          contentContainerStyle={{ paddingTop: 6, paddingBottom: 120 + insets.bottom }}
           renderItem={({ item }) => (
             <Pressable onPress={() => router.push(`/deck/${item.id}`)} style={{ marginBottom: 12 }}>
               <Card>
-                <Row align="flex-start" style={{ justifyContent: 'space-between' }}>
+                <Row align="center" style={{ justifyContent: 'space-between' }}>
                   <View style={{ flex: 1, paddingRight: 12 }}>
                     <Row gap={10} style={{ justifyContent: 'flex-start' }}>
                       <View
@@ -168,6 +159,43 @@ export default function HomeScreen() {
           )}
         />
       )}
+
+      <View
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          paddingHorizontal: t.spacing.lg,
+          paddingTop: 10,
+          paddingBottom: 10 + insets.bottom,
+        }}
+      >
+        <View
+          style={{
+            alignSelf: 'center',
+            borderRadius: 999,
+            paddingVertical: 12,
+            paddingHorizontal: 18,
+            backgroundColor: t.colors.primary,
+            shadowColor: t.colors.shadow,
+            shadowOpacity: 0.22,
+            shadowRadius: 18,
+            shadowOffset: { width: 0, height: 12 },
+            elevation: 6,
+          }}
+        >
+          <Pressable
+            onPress={() => router.push('/deck/new')}
+            style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
+          >
+            <Row gap={8} style={{ justifyContent: 'center' }}>
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '900' }}>New deck</Text>
+            </Row>
+          </Pressable>
+        </View>
+      </View>
     </Screen>
   );
 }

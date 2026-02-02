@@ -2,6 +2,7 @@ import { getDb } from '@/data/db';
 import type { Deck, DeckStats } from '@/domain/models';
 import { pickRandomDeckAccentKey } from '@/domain/decks/accent';
 import { deleteDeckLanguages } from '@/data/repositories/deckAiRepo';
+import { deleteDeckPrefs } from '@/data/repositories/deckPrefsRepo';
 import { makeId } from '@/utils/id';
 import { nowMs } from '@/utils/time';
 
@@ -105,6 +106,7 @@ export async function deleteDeck(deckId: string): Promise<void> {
     );
   });
   await deleteDeckLanguages(deckId);
+  await deleteDeckPrefs(deckId);
 }
 
 export async function getDeckStats(deckId: string, now = nowMs()): Promise<DeckStats> {

@@ -15,7 +15,10 @@
     },
     "ios": {
       "bundleIdentifier": "com.deckly.flashcards",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.deckly.flashcards",
@@ -38,6 +41,19 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "devOpenAiApiKey": {},
+      "router": {},
+      "eas": {
+        "projectId": "6caed823-1c49-4a54-ad7a-e43941467f1b"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6caed823-1c49-4a54-ad7a-e43941467f1b"
     }
   }
 }

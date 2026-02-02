@@ -20,7 +20,13 @@ function formatMode(mode: AiDebugEntry['mode']): string {
 
 function formatKind(kind: AiDebugEntry['kind']): string {
   if (kind === 'language_pair') return 'language detection';
+  if (kind === 'chat') return 'teacher chat';
   return 'example pair';
+}
+
+function formatDuration(ms?: number): string {
+  if (!ms || !Number.isFinite(ms)) return '—';
+  return `${Math.round(ms)} ms`;
 }
 
 export default function AiDebugScreen() {
@@ -87,7 +93,9 @@ export default function AiDebugScreen() {
                 <Row align="flex-start">
                   <View style={{ flex: 1, gap: 6 }}>
                     <Text style={{ fontWeight: '900' }} numberOfLines={1}>
-                      {it.errorCode ?? 'error'}{it.status ? ` (${it.status})` : ''}
+                      {it.success
+                        ? `slow response · ${formatDuration(it.durationMs)}`
+                        : `${it.errorCode ?? 'error'}${it.status ? ` (${it.status})` : ''}`}
                     </Text>
                     <Text variant="muted" numberOfLines={2}>
                       {it.front ? `Front: ${it.front}` : 'Front: —'}
@@ -99,6 +107,13 @@ export default function AiDebugScreen() {
                       {format(new Date(it.at), 'yyyy-MM-dd HH:mm')} · {formatKind(it.kind)} ·{' '}
                       {formatMode(it.mode)} · {it.model ?? 'model?'}
                     </Text>
+                    {it.success ? (
+                      <Text variant="muted">
+                        Total {formatDuration(it.durationMs)} · OpenAI{' '}
+                        {formatDuration(it.processingMs)}
+                        {it.requestId ? ` · ${it.requestId}` : ''}
+                      </Text>
+                    ) : null}
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />
                 </Row>
@@ -131,11 +146,21 @@ export default function AiDebugScreen() {
                 </Pressable>
               </Row>
 
-              <Text variant="muted" selectable>
-                {selected.errorMessage ?? '—'}
-              </Text>
+              {!selected.success ? (
+                <>
+                  <Text variant="muted" selectable>
+                    {selected.errorMessage ?? '—'}
+                  </Text>
+                  <View style={{ height: 1, backgroundColor: t.colors.border }} />
+                </>
+              ) : null}
 
-              <View style={{ height: 1, backgroundColor: t.colors.border }} />
+              <Text variant="label">Timings</Text>
+              <Text variant="muted" selectable>
+                Total: {formatDuration(selected.durationMs)} · OpenAI:{' '}
+                {formatDuration(selected.processingMs)}
+                {selected.requestId ? ` · Request: ${selected.requestId}` : ''}
+              </Text>
 
               <Text variant="label">Prompt</Text>
               <ScrollView style={{ maxHeight: 180 }}>

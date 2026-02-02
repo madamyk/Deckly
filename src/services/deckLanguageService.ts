@@ -1,5 +1,6 @@
 import { detectDeckLanguagesWithOpenAi, OpenAiError } from '@/ai/openaiClient';
 import { appendAiDebugEntry } from '@/ai/debugLog';
+import { isSlowOpenAi } from '@/ai/telemetry';
 import type { DeckLanguages } from '@/ai/deckLanguages';
 import * as deckAiRepo from '@/data/repositories/deckAiRepo';
 import { getAiApiKey } from '@/data/secureStore';
@@ -35,12 +36,24 @@ export async function ensureDeckLanguages(params: {
 
   let langs: DeckLanguages;
   try {
-    langs = await detectDeckLanguagesWithOpenAi({
+    const result = await detectDeckLanguagesWithOpenAi({
       apiKey,
       prefs,
       samples: cleaned,
       signal: params.signal,
     });
+    langs = result.data;
+    if (isSlowOpenAi(result.meta)) {
+      await appendAiDebugEntry({
+        kind: 'language_pair',
+        mode: 'single',
+        success: true,
+        model: prefs.model,
+        durationMs: result.meta.durationMs,
+        processingMs: result.meta.processingMs,
+        requestId: result.meta.requestId,
+      });
+    }
   } catch (e: any) {
     if (params.signal?.aborted || e?.code === 'cancelled') throw e;
     const oe: OpenAiError | null = e instanceof OpenAiError ? e : null;

@@ -86,6 +86,18 @@ function RootLayoutNav() {
           <Stack.Screen name="deck/[deckId]/cards/new" options={{ title: 'New Card' }} />
           <Stack.Screen name="deck/[deckId]/cards/[cardId]" options={{ title: 'Edit Card' }} />
           <Stack.Screen name="deck/[deckId]/review/index" options={{ title: 'Review' }} />
+          <Stack.Screen
+            name="deck/[deckId]/extra-language"
+            options={{
+              title: 'Extra language',
+              presentation: 'pageSheet',
+              gestureEnabled: true,
+            }}
+          />
+          <Stack.Screen
+            name="deck/[deckId]/review/chat/[cardId]"
+            options={{ title: 'Ask the teacher' }}
+          />
           <Stack.Screen name="deck/[deckId]/import/index" options={{ title: 'Import CSV' }} />
         </Stack>
       </ThemeProvider>

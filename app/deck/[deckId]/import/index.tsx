@@ -17,6 +17,7 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
+import { getExampleLevel } from '@/data/repositories/deckPrefsRepo';
 import { getAiApiKey } from '@/data/secureStore';
 import { makeId } from '@/utils/id';
 import { generateAndPersistExamplePairs } from '@/services/examplePairService';
@@ -358,11 +359,14 @@ export default function ImportCsvScreen() {
         setGenProgress({ done: 0, total: examplesTotal, failed: 0 });
 
         try {
+          const levelOverride = await getExampleLevel(deckId);
           const res = await generateAndPersistExamplePairs({
             deckId,
             cards: cardsForGen,
             mode,
             concurrency: 2,
+            batchSize: 10,
+            levelOverride: levelOverride ?? undefined,
             signal: controller.signal,
             onProgress: (p) => setGenProgress(p),
           });

@@ -1,10 +1,11 @@
-import { Picker } from '@react-native-picker/picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Picker } from '@react-native-picker/picker';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 
 import { getAiApiKey, setAiApiKey } from '@/data/secureStore';
+import { AI_MODELS } from '@/domain/aiModels';
 import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
@@ -133,44 +134,22 @@ export default function AiSettingsScreen() {
               selectedValue={prefs.ai.model}
               onValueChange={(v) => patchPrefs({ ai: { model: String(v) } })}
             >
-              <Picker.Item label="gpt-5" value="gpt-5" />
-              <Picker.Item label="gpt-5-mini" value="gpt-5-mini" />
-              <Picker.Item label="gpt-5-nano" value="gpt-5-nano" />
-              <Picker.Item label="gpt-4.1-mini (default)" value="gpt-4.1-mini" />
-              <Picker.Item label="gpt-4o-mini" value="gpt-4o-mini" />
-              <Picker.Item label="gpt-4o" value="gpt-4o" />
+              {AI_MODELS.map((m) => (
+                <Picker.Item key={m.value} label={m.label} value={m.value} />
+              ))}
             </Picker>
 
-            <View style={{ height: 8 }} />
-            <Text variant="muted">
-              These models use Structured Outputs (JSON schema) for more reliable parsing.
-            </Text>
 
-            <View style={{ height: 12 }} />
             <Text variant="label">Example difficulty</Text>
             <Picker
               selectedValue={prefs.ai.level}
               onValueChange={(v) => patchPrefs({ ai: { level: v } as any })}
             >
-              <Picker.Item label="A1" value="A1" />
-              <Picker.Item label="A2" value="A2" />
-              <Picker.Item label="B1 (default)" value="B1" />
-              <Picker.Item label="B2" value="B2" />
-              <Picker.Item label="C1" value="C1" />
-              <Picker.Item label="C2" value="C2" />
+              <Picker.Item label="Easy" value="easy" />
+              <Picker.Item label="Medium (default)" value="medium" />
+              <Picker.Item label="Advanced" value="advanced" />
             </Picker>
 
-            <View style={{ height: 12 }} />
-            <Text variant="label">Example domain</Text>
-            <Picker
-              selectedValue={prefs.ai.domain}
-              onValueChange={(v) => patchPrefs({ ai: { domain: v } as any })}
-            >
-              <Picker.Item label="daily (default)" value="daily" />
-              <Picker.Item label="travel" value="travel" />
-              <Picker.Item label="work" value="work" />
-              <Picker.Item label="neutral" value="neutral" />
-            </Picker>
           </View>
         </Surface>
 
