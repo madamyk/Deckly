@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, Text, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useDecklyTheme } from '@/ui/theme/provider';
 
@@ -32,6 +33,7 @@ export function TogglePill({
 }: Props) {
   const t = useDecklyTheme();
 
+  const useGradient = value && !activeBg;
   const bg = value ? activeBg ?? t.colors.primary : inactiveBg ?? t.colors.surface;
   const fg = value ? activeFg ?? '#fff' : inactiveFg ?? t.colors.text;
   const borderColor = value ? activeBorderColor ?? 'transparent' : inactiveBorderColor ?? t.colors.border;
@@ -44,14 +46,24 @@ export function TogglePill({
           paddingHorizontal: 12,
           paddingVertical: 8,
           borderRadius: 999,
-          backgroundColor: bg,
-          borderWidth: 1,
+          backgroundColor: useGradient ? 'transparent' : bg,
+          borderWidth: useGradient ? 0 : 1,
           borderColor,
+          overflow: 'hidden',
           opacity: pressed ? 0.85 : 1,
         },
         style,
       ]}
     >
+      {useGradient ? (
+        <LinearGradient
+          colors={[t.colors.primaryGradientStart, t.colors.primaryGradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
+          pointerEvents="none"
+        />
+      ) : null}
       <Text style={{ color: fg, fontWeight: '900' }}>{value ? labelOn : labelOff}</Text>
     </Pressable>
   );

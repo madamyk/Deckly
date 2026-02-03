@@ -1,55 +1,51 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  View,
-} from 'react-native';
-
-import * as cardsRepo from '@/data/repositories/cardsRepo';
-import { getDeck } from '@/data/repositories/decksRepo';
-import {
-  getExampleLevel,
   getSecondaryLanguage,
-  setExampleLevel,
+  getShowExamplesOnBack,
+  getShowExamplesOnFront,
+  getStudyReversed,
   setSecondaryLanguage,
+  setShowExamplesOnBack,
+  setShowExamplesOnFront,
+  setStudyReversed,
 } from '@/data/repositories/deckPrefsRepo';
+import { getDeck } from '@/data/repositories/decksRepo';
 import { getLanguageOption } from '@/domain/languages';
 import type { Deck } from '@/domain/models';
-import type { AiExampleLevel } from '@/domain/prefs';
-import { generateAndPersistExamplePairs } from '@/services/examplePairService';
 import { useDecksStore } from '@/stores/decksStore';
-import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { Input } from '@/ui/components/Input';
-import { LevelPicker } from '@/ui/components/LevelPicker';
+import { Row } from '@/ui/components/Row';
+import { InfoModal } from '@/ui/components/InfoModal';
 import { Screen } from '@/ui/components/Screen';
 import { Text } from '@/ui/components/Text';
-import { Row } from '@/ui/components/Row';
+import { TogglePill } from '@/ui/components/TogglePill';
+import { ToggleRow } from '@/ui/components/ToggleRow';
 import { DECK_ACCENTS, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
-import { getAiApiKey } from '@/data/secureStore';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Stack, router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function DeckSettingsScreen(props: { deckId: string }) {
   const t = useDecklyTheme();
+  const insets = useSafeAreaInsets();
   const { updateDeck, deleteDeck } = useDecksStore();
-  const ai = usePrefsStore((s) => s.prefs.ai);
 
   const [deck, setDeck] = useState<Deck | null>(null);
   const [name, setName] = useState('');
   const [accentKey, setAccentKey] = useState<string>('');
   const [secondaryLanguage, setSecondaryLanguageState] = useState<string | null>(null);
   const [savedSecondaryLanguage, setSavedSecondaryLanguage] = useState<string | null>(null);
-  const [exampleLevel, setExampleLevelState] = useState<AiExampleLevel>(ai.level);
+  const [studyReversed, setStudyReversedState] = useState(false);
+  const [savedStudyReversed, setSavedStudyReversed] = useState(false);
+  const [showExamplesOnFront, setShowExamplesOnFrontState] = useState(true);
+  const [savedShowExamplesOnFront, setSavedShowExamplesOnFront] = useState(true);
+  const [showExamplesOnBack, setShowExamplesOnBackState] = useState(true);
+  const [savedShowExamplesOnBack, setSavedShowExamplesOnBack] = useState(true);
+  const [studyReversedInfoOpen, setStudyReversedInfoOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [regenProgress, setRegenProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
-  const [regenRunning, setRegenRunning] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
     const d = await getDeck(props.deckId);
@@ -61,9 +57,16 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     const secondary = await getSecondaryLanguage(props.deckId);
     setSecondaryLanguageState(secondary);
     setSavedSecondaryLanguage(secondary);
-    const level = await getExampleLevel(props.deckId);
-    setExampleLevelState(level ?? ai.level);
-  }, [props.deckId, ai.level]);
+    const reversed = await getStudyReversed(props.deckId);
+    setStudyReversedState(reversed);
+    setSavedStudyReversed(reversed);
+    const showFront = await getShowExamplesOnFront(props.deckId);
+    setShowExamplesOnFrontState(showFront);
+    setSavedShowExamplesOnFront(showFront);
+    const showBack = await getShowExamplesOnBack(props.deckId);
+    setShowExamplesOnBackState(showBack);
+    setSavedShowExamplesOnBack(showBack);
+  }, [props.deckId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,9 +80,24 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     return (
       trimmed !== deck.name ||
       accentKey !== deck.accentColor ||
-      (secondaryLanguage ?? null) !== (savedSecondaryLanguage ?? null)
+      (secondaryLanguage ?? null) !== (savedSecondaryLanguage ?? null) ||
+      studyReversed !== savedStudyReversed ||
+      showExamplesOnFront !== savedShowExamplesOnFront ||
+      showExamplesOnBack !== savedShowExamplesOnBack
     );
-  }, [name, accentKey, deck, secondaryLanguage, savedSecondaryLanguage]);
+  }, [
+    name,
+    accentKey,
+    deck,
+    secondaryLanguage,
+    savedSecondaryLanguage,
+    studyReversed,
+    savedStudyReversed,
+    showExamplesOnFront,
+    savedShowExamplesOnFront,
+    showExamplesOnBack,
+    savedShowExamplesOnBack,
+  ]);
 
   const canSave = useMemo(() => {
     const trimmed = name.trim();
@@ -92,7 +110,9 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     try {
       await updateDeck(deck.id, { name: name.trim(), accentColor: accentKey });
       await setSecondaryLanguage(deck.id, secondaryLanguage ?? null);
-      await setExampleLevel(deck.id, exampleLevel);
+      await setStudyReversed(deck.id, studyReversed);
+      await setShowExamplesOnFront(deck.id, showExamplesOnFront);
+      await setShowExamplesOnBack(deck.id, showExamplesOnBack);
       router.back();
     } catch (e: any) {
       Alert.alert('Deckly', e?.message ?? 'Failed to save deck.');
@@ -143,72 +163,6 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     ? `${secondaryOption.emoji} ${secondaryOption.label}`
     : 'Not set';
 
-  async function regenerateExamples() {
-    if (!deck || regenRunning) return;
-    const key = await getAiApiKey();
-    if (!ai.enabled) {
-      Alert.alert('Deckly', 'AI Assist is off. Enable it in Settings.');
-      router.push('/settings/ai');
-      return;
-    }
-    if (!key) {
-      Alert.alert('Deckly', 'Add your OpenAI API key in Settings to regenerate examples.');
-      router.push('/settings/ai');
-      return;
-    }
-    Alert.alert(
-      'Regenerate examples?',
-      'This will overwrite existing examples and notes for all cards in this deck. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Regenerate',
-          style: 'destructive',
-          onPress: async () => {
-            setRegenRunning(true);
-            setRegenProgress({ done: 0, total: 0, failed: 0 });
-            const controller = new AbortController();
-            abortRef.current = controller;
-            try {
-              await setExampleLevel(deck.id, exampleLevel);
-              setSavedExampleLevel(exampleLevel);
-              const cards = await cardsRepo.listCards(deck.id);
-              const cardsForGen = cards.map((c) => ({
-                id: c.id,
-                front: c.front,
-                back: c.back,
-                exampleL1: c.exampleL1 ?? null,
-                exampleL2: c.exampleL2 ?? null,
-              }));
-              const res = await generateAndPersistExamplePairs({
-                deckId: deck.id,
-                cards: cardsForGen,
-                mode: 'all',
-                concurrency: 2,
-                levelOverride: exampleLevel,
-                signal: controller.signal,
-                onProgress: (p) => setRegenProgress(p),
-              });
-              if (!controller.signal.aborted) {
-                Alert.alert(
-                  'Deckly',
-                  `Regenerated ${res.done - res.failed.length}/${res.total} cards.`,
-                );
-              }
-            } catch (e: any) {
-              if (!controller.signal.aborted) {
-                Alert.alert('Deckly', e?.message ?? 'Failed to regenerate examples.');
-              }
-            } finally {
-              setRegenRunning(false);
-              abortRef.current = null;
-            }
-          },
-        },
-      ],
-    );
-  }
-
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen
@@ -218,150 +172,166 @@ export function DeckSettingsScreen(props: { deckId: string }) {
         }}
       />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 24 }}
+      <View style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          {!deck ? (
-            <Text variant="muted">Deck not found.</Text>
-          ) : (
-            <View style={{ gap: 14 }}>
-              <View style={{ paddingVertical: 4 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 140 }}
+          >
+            {!deck ? (
+              <Text variant="muted">Deck not found.</Text>
+            ) : (
+              <View style={{ gap: 14 }}>
                 <Input
                   label="Name"
                   value={name}
                   onChangeText={setName}
                   placeholder="Deck name"
+                  maxLength={20}
                   cursorAtEndOnFocus
                   selectTextOnFocus={false}
                   returnKeyType="done"
                   onSubmitEditing={save}
                 />
-              </View>
 
-              <View style={{ height: 1, backgroundColor: t.colors.border }} />
-
-              <View style={{ gap: 10 }}>
-                <Text variant="label">Example level</Text>
-                <LevelPicker value={exampleLevel} onChange={setExampleLevelState} />
-                <Button
-                  title={regenRunning ? 'Regenerating...' : 'Regenerate examples'}
-                  variant="secondary"
-                  onPress={regenerateExamples}
-                  disabled={regenRunning}
-                />
-                {regenProgress ? (
-                  <View style={{ gap: 6 }}>
+                <View style={{ gap: 10 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text variant="label">Accent</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      {regenRunning ? (
-                        <ActivityIndicator color={t.colors.textMuted} />
-                      ) : null}
-                      <Text variant="muted">
-                        Regenerating {regenProgress.done}/{regenProgress.total}
-                      </Text>
-                    </View>
-                    {regenProgress.failed ? (
-                      <Text variant="muted" style={{ color: t.colors.danger }}>
-                        Failed: {regenProgress.failed}
-                      </Text>
-                    ) : null}
-                    {regenRunning ? (
-                      <Button
-                        title="Cancel"
-                        variant="dangerGhost"
-                        onPress={() => abortRef.current?.abort()}
-                      />
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={{ height: 1, backgroundColor: t.colors.border }} />
-
-              <View style={{ gap: 10 }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text variant="label">Accent</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <View
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 999,
-                        backgroundColor: previewColor,
-                      }}
-                    />
-                    <Text variant="muted">Preview</Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingTop: 4 }}>
-                  {DECK_ACCENTS.map((a) => {
-                    const selected = accentKey === a.key;
-                    return (
-                      <Pressable
-                        key={a.key}
-                        onPress={() => setAccentKey(a.key)}
-                        style={({ pressed }) => ({
-                          width: 36,
-                          height: 36,
+                      <View
+                        style={{
+                          width: 10,
+                          height: 10,
                           borderRadius: 999,
-                          borderWidth: 2,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: a.color,
-                          borderColor: selected ? '#fff' : 'rgba(255,255,255,0.35)',
-                          opacity: pressed ? 0.85 : 1,
-                        })}
+                          backgroundColor: previewColor,
+                        }}
+                      />
+                      <Text variant="muted">Preview</Text>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 8 }}>
+                    {DECK_ACCENTS.map((a) => {
+                      const selected = accentKey === a.key;
+                      return (
+                        <Pressable
+                          key={a.key}
+                          onPress={() => setAccentKey(a.key)}
+                          style={({ pressed }) => ({
+                            width: 36,
+                            height: 36,
+                            borderRadius: 999,
+                            borderWidth: 2,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: a.color,
+                            borderColor: selected ? '#fff' : 'rgba(255,255,255,0.35)',
+                            opacity: pressed ? 0.85 : 1,
+                          })}
+                        >
+                          {selected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/deck/[deckId]/extra-language',
+                      params: { deckId: props.deckId },
+                    })
+                  }
+                  style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1, paddingVertical: 2 })}
+                >
+                  <Row>
+                    <View style={{ gap: 4, flex: 1 }}>
+                      <Text variant="label">Extra language</Text>
+                      <Text variant="muted">{extraLabel}</Text>
+                    </View>
+                    <Ionicons name="chevron-down" size={18} color={t.colors.textMuted} />
+                  </Row>
+                </Pressable>
+
+                <View style={{ gap: 6 }}>
+                  <Row style={{ alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                      <Text style={{ fontWeight: '500', color: t.colors.textMuted }}>
+                        Switch card sides
+                      </Text>
+                      <Pressable
+                        onPress={() => setStudyReversedInfoOpen(true)}
+                        hitSlop={10}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
                       >
-                        {selected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}
+                        <Ionicons name="information-circle-outline" size={16} color={t.colors.textMuted} />
                       </Pressable>
-                    );
-                  })}
+                    </View>
+                    <View>
+                      {Platform.OS === 'ios' ? (
+                        <Switch
+                          value={studyReversed}
+                          onValueChange={setStudyReversedState}
+                          trackColor={{
+                            false: t.colors.surface2,
+                            true: t.colors.primaryGradientEnd,
+                          }}
+                          thumbColor={studyReversed ? '#FFFFFF' : '#F4F5F7'}
+                          ios_backgroundColor={t.colors.surface2}
+                        />
+                      ) : (
+                        <TogglePill value={studyReversed} onToggle={setStudyReversedState} />
+                      )}
+                    </View>
+                  </Row>
+                  <ToggleRow
+                    label="Show examples on front"
+                    value={showExamplesOnFront}
+                    onToggle={setShowExamplesOnFrontState}
+                  />
+                  <ToggleRow
+                    label="Show examples on back"
+                    value={showExamplesOnBack}
+                    onToggle={setShowExamplesOnBackState}
+                  />
                 </View>
               </View>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
 
-              <View style={{ height: 1, backgroundColor: t.colors.border }} />
-
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/deck/[deckId]/extra-language',
-                    params: { deckId: props.deckId },
-                  })
-                }
-                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1, paddingVertical: 4 })}
-              >
-                <Row>
-                  <View style={{ gap: 4, flex: 1 }}>
-                    <Text variant="label">Extra language</Text>
-                    <Text variant="muted">{extraLabel}</Text>
-                  </View>
-                  <Ionicons name="chevron-down" size={18} color={t.colors.textMuted} />
-                </Row>
-              </Pressable>
-
-              <View style={{ gap: 10, marginTop: 6 }}>
-                <Button
-                  title={saving ? 'Saving...' : 'Save changes'}
-                  onPress={save}
-                  disabled={!canSave}
-                />
-                <Button title="Delete deck" variant="dangerGhost" onPress={del} />
-              </View>
+        {deck ? (
+          <View style={{ paddingHorizontal: t.spacing.lg, paddingBottom: 10 + insets.bottom }}>
+            <View style={{ gap: 10 }}>
+              <Button
+                title={saving ? 'Saving...' : 'Save changes'}
+                onPress={save}
+                disabled={!canSave}
+                style={{ borderRadius: 999 }}
+              />
+              <Button title="Delete deck" variant="dangerGhost" onPress={del} />
             </View>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </View>
+        ) : null}
+      </View>
+
+      <InfoModal
+        visible={studyReversedInfoOpen}
+        title="Switch card sides"
+        onClose={() => setStudyReversedInfoOpen(false)}
+      >
+        <Text variant="muted">Show the back first and reveal the front during review.</Text>
+      </InfoModal>
     </Screen>
   );
 }

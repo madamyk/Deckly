@@ -5,6 +5,7 @@ import Animated, { FadeInRight, FadeOutLeft, FadeInDown, FadeOutDown } from 'rea
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
+import { getShowExamplesOnBack, getShowExamplesOnFront, getStudyReversed } from '@/data/repositories/deckPrefsRepo';
 import type { Card } from '@/domain/models';
 import type { Rating } from '@/domain/ratings';
 import { schedule } from '@/domain/scheduling/schedule';
@@ -32,6 +33,9 @@ export default function ReviewScreen() {
   const [loading, setLoading] = useState(false);
   const [examplesEnabled, setExamplesEnabled] = useState(true);
   const [animateExamples, setAnimateExamples] = useState(false);
+  const [studyReversed, setStudyReversed] = useState(false);
+  const [showExamplesOnFront, setShowExamplesOnFront] = useState(true);
+  const [showExamplesOnBack, setShowExamplesOnBack] = useState(true);
   const resumeRef = useRef(false);
   const currentIdRef = useRef<string | null>(null);
   const flippedRef = useRef(false);
@@ -76,7 +80,15 @@ export default function ReviewScreen() {
       const preserve = resumeRef.current;
       resumeRef.current = false;
       load({ preserve });
-    }, [load]),
+      (async () => {
+        const reversed = await getStudyReversed(String(deckId));
+        setStudyReversed(reversed);
+        const showFront = await getShowExamplesOnFront(String(deckId));
+        setShowExamplesOnFront(showFront);
+        const showBack = await getShowExamplesOnBack(String(deckId));
+        setShowExamplesOnBack(showBack);
+      })();
+    }, [load, deckId]),
   );
 
   useEffect(() => {
@@ -92,10 +104,14 @@ export default function ReviewScreen() {
 
   const current = queue[index] ?? null;
   const flipped = !!current && flippedId === current.id;
+  const frontText = current ? (studyReversed ? current.back : current.front) : '';
+  const backText = current ? (studyReversed ? current.front : current.back) : '';
+  const frontExampleText = current ? (studyReversed ? current.exampleL2 : current.exampleL1) : null;
+  const backExampleText = current ? (studyReversed ? current.exampleL1 : current.exampleL2) : null;
   const frontExampleVisible =
-    !!current && examplesEnabled && prefs.review.showExamplesOnFront && !!current.exampleL1?.trim();
+    !!current && examplesEnabled && showExamplesOnFront && !!frontExampleText?.trim();
   const backExampleVisible =
-    !!current && examplesEnabled && prefs.review.showExamplesOnBack && !!current.exampleL2?.trim();
+    !!current && examplesEnabled && showExamplesOnBack && !!backExampleText?.trim();
   const note = current?.exampleNote?.trim() ? current.exampleNote.trim() : null;
   const noteVisible = examplesEnabled && !!note;
   const noteAnimate = animateExamples;
@@ -290,14 +306,14 @@ export default function ReviewScreen() {
         </Row>
 
         <FlipCard
-          front={current.front}
-          back={current.back}
+          front={frontText}
+          back={backText}
           frontFooter={
             frontExampleVisible ? (
               <Animated.View entering={FadeInDown.duration(140)} exiting={FadeOutDown.duration(120)}>
                 <ExampleFooter
                   key={`${current.id}:front`}
-                  text={current.exampleL1!.trim()}
+                  text={frontExampleText!.trim()}
                   collapsedByDefault={prefs.review.examplesCollapsedByDefault}
                 />
               </Animated.View>
@@ -308,7 +324,7 @@ export default function ReviewScreen() {
               <Animated.View entering={FadeInDown.duration(140)} exiting={FadeOutDown.duration(120)}>
                 <ExampleFooter
                   key={`${current.id}:back`}
-                  text={current.exampleL2!.trim()}
+                  text={backExampleText!.trim()}
                   collapsedByDefault={prefs.review.examplesCollapsedByDefault}
                 />
               </Animated.View>

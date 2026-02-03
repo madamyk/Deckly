@@ -13,6 +13,8 @@ export type DecklyTheme = {
     textMuted: string;
     primary: string;
     primary2: string;
+    primaryGradientStart: string;
+    primaryGradientEnd: string;
     danger: string;
     warning: string;
     success: string;
@@ -48,6 +50,8 @@ export function getTheme(scheme: DecklyScheme): DecklyTheme {
         textMuted: 'rgba(238,242,255,0.72)',
         primary: '#7C5CFF',
         primary2: '#4FD1C5',
+        primaryGradientStart: '#5B6CFF',
+        primaryGradientEnd: '#7C5CFF',
         danger: '#FF5C7A',
         warning: '#FFB020',
         success: '#34D399',
@@ -71,6 +75,8 @@ export function getTheme(scheme: DecklyScheme): DecklyTheme {
       textMuted: 'rgba(17,24,39,0.65)',
       primary: '#4F46E5',
       primary2: '#0EA5E9',
+      primaryGradientStart: '#3F6BF2',
+      primaryGradientEnd: '#4F46E5',
       danger: '#E11D48',
       warning: '#D97706',
       success: '#059669',
@@ -80,4 +86,3 @@ export function getTheme(scheme: DecklyScheme): DecklyTheme {
     spacing: { xs: 6, sm: 10, md: 14, lg: 18, xl: 24 },
   };
 }
-

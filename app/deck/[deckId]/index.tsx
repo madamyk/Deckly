@@ -16,7 +16,8 @@ import { Screen } from '@/ui/components/Screen';
 import { Text } from '@/ui/components/Text';
 import { useDecklyTheme } from '@/ui/theme/provider';
 import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
-import { resolveDeckAccentColor } from '@/ui/theme/deckAccents';
+import { getDeckAccentGradient, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
+import { LinearGradient } from 'expo-linear-gradient';
 import { formatDueRelative, nowMs } from '@/utils/time';
 
 export default function DeckScreen() {
@@ -163,6 +164,7 @@ export default function DeckScreen() {
   // Room for the floating CTA + home indicator, without an excessive blank tail.
   const listBottomPad = insets.bottom + 76;
   const accent = resolveDeckAccentColor(deck?.accentColor) ?? t.colors.primary;
+  const accentGradient = getDeckAccentGradient(accent, t.scheme);
 
   if (!deck) {
     return (
@@ -283,9 +285,10 @@ export default function DeckScreen() {
           }}
         >
           <EmptyState
-            iconName="albums-outline"
             title="This deck is empty"
             message="Add your first cards or import a CSV to get started."
+            gap={24}
+            messageStyle={{ fontWeight: '500' }}
             actionTitle="Add cards"
             onAction={openAddMenu}
           />
@@ -305,42 +308,72 @@ export default function DeckScreen() {
             paddingBottom: 10 + insets.bottom,
           }}
         >
-          <View
-            style={{
-              alignSelf: 'center',
-              borderRadius: 999,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              backgroundColor: dueCount > 0 ? accent : t.colors.surface2,
-              borderWidth: dueCount > 0 ? 0 : 1,
-              borderColor: t.colors.border,
-              shadowColor: t.colors.shadow,
-              shadowOpacity: 0.22,
-              shadowRadius: 18,
-              shadowOffset: { width: 0, height: 12 },
-              elevation: 6,
-            }}
-          >
+          {dueCount > 0 ? (
             <Pressable
-              disabled={dueCount <= 0}
               onPress={() =>
                 router.push({ pathname: '/deck/[deckId]/review', params: { deckId } })
               }
-              style={({ pressed }) => [
-                { opacity: dueCount <= 0 ? 0.7 : pressed ? 0.9 : 1 },
-              ]}
+              style={({ pressed }) => [{ alignSelf: 'center', opacity: pressed ? 0.9 : 1 }]}
             >
-              <Text
+              <LinearGradient
+                colors={accentGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
                 style={{
-                  color: dueCount > 0 ? '#fff' : t.colors.textMuted,
-                  fontWeight: '900',
-                  textAlign: 'center',
+                  borderRadius: 999,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  shadowColor: t.colors.shadow,
+                  shadowOpacity: 0.22,
+                  shadowRadius: 18,
+                  shadowOffset: { width: 0, height: 12 },
+                  elevation: 6,
                 }}
               >
-                {`Review due (${dueCount})`}
-              </Text>
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontWeight: '900',
+                    textAlign: 'center',
+                  }}
+                >
+                  {`Review due (${dueCount})`}
+                </Text>
+              </LinearGradient>
             </Pressable>
-          </View>
+          ) : (
+            <View
+              style={{
+                alignSelf: 'center',
+                borderRadius: 999,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                backgroundColor: t.colors.surface2,
+                borderWidth: 1,
+                borderColor: t.colors.border,
+                shadowColor: t.colors.shadow,
+                shadowOpacity: 0.22,
+                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 12 },
+                elevation: 6,
+              }}
+            >
+              <Pressable
+                disabled
+                style={{ opacity: 0.7 }}
+              >
+                <Text
+                  style={{
+                    color: t.colors.textMuted,
+                    fontWeight: '900',
+                    textAlign: 'center',
+                  }}
+                >
+                  {`Review due (${dueCount})`}
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       ) : null}
     </Screen>

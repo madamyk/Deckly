@@ -4,7 +4,6 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  ActionSheetIOS,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,7 +24,7 @@ import * as cardsRepo from '@/data/repositories/cardsRepo';
 import * as decksRepo from '@/data/repositories/decksRepo';
 import { getAiApiKey } from '@/data/secureStore';
 import { getSecondaryLanguage } from '@/data/repositories/deckPrefsRepo';
-import { AI_MODELS, getAiModelLabel } from '@/domain/aiModels';
+import { AI_MODELS } from '@/domain/aiModels';
 import { getLanguageOption } from '@/domain/languages';
 import type { Card } from '@/domain/models';
 import { sendCardChatMessage, type ChatHistoryItem } from '@/services/cardChatService';
@@ -52,18 +51,21 @@ export default function CardChatScreen() {
   const t = useDecklyTheme();
   const { deckId, cardId } = useLocalSearchParams<{ deckId: string; cardId: string }>();
   const headerHeight = useHeaderHeight();
-  const { prefs, patchPrefs } = usePrefsStore();
+  const { prefs } = usePrefsStore();
 
   const [card, setCard] = useState<Card | null>(null);
   const [loadingCard, setLoadingCard] = useState(true);
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [messages, setMessages] = useState<ChatHistoryItem[]>([]);
   const [input, setInput] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accent, setAccent] = useState<string | null>(null);
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
   const [secondaryLangCode, setSecondaryLangCode] = useState<string | null>(null);
+  const [chatModel, setChatModel] = useState(() => prefs.ai.model);
+  const [chatReasoning, setChatReasoning] = useState(() => prefs.ai.reasoningEffort);
 
   const scrollRef = useRef<ScrollView>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -115,7 +117,8 @@ export default function CardChatScreen() {
     return 'Ask anything';
   }, [aiReady]);
   const accentColor = accent ?? t.colors.primary;
-  const modelLabel = useMemo(() => getAiModelLabel(prefs.ai.model), [prefs.ai.model]);
+  const reasoningLabel =
+    chatReasoning === 'high' ? 'High' : chatReasoning === 'medium' ? 'Medium' : 'Low (default)';
   const secondaryOption = useMemo(() => getLanguageOption(secondaryLangCode), [secondaryLangCode]);
 
   const quickQuestions = useMemo(() => {
@@ -139,34 +142,7 @@ export default function CardChatScreen() {
 
   const headerRight = () => (
     <Pressable
-      onPress={() => {
-        if (Platform.OS === 'ios') {
-          const options = [...AI_MODELS.map((m) => m.label), 'Cancel'];
-          const cancelButtonIndex = options.length - 1;
-          const selectedIndex = AI_MODELS.findIndex((m) => m.value === prefs.ai.model);
-          ActionSheetIOS.showActionSheetWithOptions(
-            {
-              options,
-              cancelButtonIndex,
-              title: 'Select model',
-              message: `Current: ${modelLabel}`,
-              destructiveButtonIndex: undefined,
-              // highlight current model
-              disabledButtonIndices:
-                selectedIndex >= 0 ? [selectedIndex] : undefined,
-            },
-            (buttonIndex) => {
-              if (buttonIndex === cancelButtonIndex) return;
-              const next = AI_MODELS[buttonIndex];
-              if (next?.value) {
-                patchPrefs({ ai: { model: next.value } });
-              }
-            },
-          );
-        } else {
-          setModelPickerOpen(true);
-        }
-      }}
+      onPress={() => setChatSettingsOpen(true)}
       hitSlop={10}
       style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, paddingHorizontal: 8, paddingVertical: 6 })}
     >
@@ -193,6 +169,8 @@ export default function CardChatScreen() {
         question,
         history,
         extraSystemInstruction,
+        modelOverride: chatModel,
+        reasoningEffortOverride: chatReasoning,
         signal: controller.signal,
       });
       setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
@@ -271,46 +249,6 @@ export default function CardChatScreen() {
                   <Text style={{ fontWeight: '800', textAlign: 'center' }}>{card.back}</Text>
                 </View>
 
-                <View style={{ alignItems: 'center', width: '100%', gap: 10 }}>
-                  <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
-                    Quick questions
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      flexWrap: 'wrap',
-                      gap: 8,
-                      justifyContent: 'center',
-                      width: '100%',
-                    }}
-                  >
-                    {quickQuestions.map((q, idx) => {
-                      const delayMs = 140 + idx * 120;
-                      return (
-                      <AnimatedPill key={q.label} delayMs={delayMs}>
-                        <Pressable
-                          onPress={() => handleSend(q.label, q.instruction)}
-                          disabled={!aiReady || sending}
-                          style={({ pressed }) => ({
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                            borderRadius: 999,
-                            backgroundColor: t.colors.surface2,
-                            borderWidth: 1,
-                            borderColor: t.colors.border,
-                            opacity: !aiReady ? 0.45 : pressed ? 0.8 : 1,
-                          })}
-                        >
-                          <Text style={{ fontSize: 12, fontWeight: '600', color: t.colors.text }}>
-                            {q.label}
-                          </Text>
-                        </Pressable>
-                      </AnimatedPill>
-                      );
-                    })}
-                  </View>
-                </View>
-
                 <Text
                   style={{
                     fontSize: 16,
@@ -321,6 +259,50 @@ export default function CardChatScreen() {
                 >
                   Ask anything about meaning, usage, or translation.
                 </Text>
+
+                <View style={{ alignItems: 'center', width: '100%', marginTop: -4, gap: 8 }}>
+                  {!inputFocused ? (
+                    <>
+                      <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
+                        Quick questions
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                          justifyContent: 'center',
+                          width: '100%',
+                        }}
+                      >
+                        {quickQuestions.map((q, idx) => {
+                          const delayMs = 140 + idx * 120;
+                          return (
+                            <AnimatedPill key={q.label} delayMs={delayMs}>
+                              <Pressable
+                                onPress={() => handleSend(q.label, q.instruction)}
+                                disabled={!aiReady || sending}
+                                style={({ pressed }) => ({
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 6,
+                                  borderRadius: 999,
+                                  backgroundColor: t.colors.surface2,
+                                  borderWidth: 1,
+                                  borderColor: t.colors.border,
+                                  opacity: !aiReady ? 0.45 : pressed ? 0.8 : 1,
+                                })}
+                              >
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: t.colors.text }}>
+                                  {q.label}
+                                </Text>
+                              </Pressable>
+                            </AnimatedPill>
+                          );
+                        })}
+                      </View>
+                    </>
+                  ) : null}
+                </View>
               </View>
             ) : (
               <View
@@ -423,6 +405,8 @@ export default function CardChatScreen() {
               <Input
                 value={input}
                 onChangeText={setInput}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 placeholder={placeholder}
                 editable={aiReady && !sending}
                 multiline
@@ -450,14 +434,14 @@ export default function CardChatScreen() {
       </KeyboardAvoidingView>
 
       <Modal
-        visible={modelPickerOpen}
+        visible={chatSettingsOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setModelPickerOpen(false)}
+        onRequestClose={() => setChatSettingsOpen(false)}
       >
         <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
           <Pressable
-            onPress={() => setModelPickerOpen(false)}
+            onPress={() => setChatSettingsOpen(false)}
             style={{
               ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
               backgroundColor: 'rgba(0,0,0,0.45)',
@@ -472,35 +456,65 @@ export default function CardChatScreen() {
             }}
           >
             <Row>
-              <Text variant="h2">Select model</Text>
-              <Pressable onPress={() => setModelPickerOpen(false)} hitSlop={10}>
+              <Text variant="h2">Chat settings</Text>
+              <Pressable onPress={() => setChatSettingsOpen(false)} hitSlop={10}>
                 <Ionicons name="close" size={20} color={t.colors.textMuted} />
               </Pressable>
             </Row>
-            {AI_MODELS.map((m) => {
-              const selected = m.value === prefs.ai.model;
-              return (
-                <Pressable
-                  key={m.value}
-                  onPress={() => {
-                    patchPrefs({ ai: { model: m.value } });
-                    setModelPickerOpen(false);
-                  }}
-                  style={({ pressed }) => ({
-                    paddingVertical: 10,
-                    opacity: pressed ? 0.7 : 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  })}
-                >
-                  <Text style={{ fontWeight: selected ? '800' : '600' }}>{m.label}</Text>
-                  {selected ? (
-                    <Ionicons name="checkmark" size={18} color={t.colors.primary2} />
-                  ) : null}
-                </Pressable>
-              );
-            })}
+
+            <View style={{ gap: 8 }}>
+              <Text variant="label">Model</Text>
+              {AI_MODELS.map((m) => {
+                const selected = m.value === chatModel;
+                return (
+                  <Pressable
+                    key={m.value}
+                    onPress={() => setChatModel(m.value)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 10,
+                      opacity: pressed ? 0.7 : 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    })}
+                  >
+                    <Text style={{ fontWeight: selected ? '800' : '600' }}>{m.label}</Text>
+                    {selected ? (
+                      <Ionicons name="checkmark" size={18} color={t.colors.primary2} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={{ height: 1, backgroundColor: t.colors.border }} />
+
+            <View style={{ gap: 8 }}>
+              <Text variant="label">{`Reasoning · ${reasoningLabel}`}</Text>
+              {(['low', 'medium', 'high'] as const).map((level) => {
+                const selected = chatReasoning === level;
+                const label =
+                  level === 'high' ? 'High' : level === 'medium' ? 'Medium' : 'Low (default)';
+                return (
+                  <Pressable
+                    key={level}
+                    onPress={() => setChatReasoning(level)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 10,
+                      opacity: pressed ? 0.7 : 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    })}
+                  >
+                    <Text style={{ fontWeight: selected ? '800' : '600' }}>{label}</Text>
+                    {selected ? (
+                      <Ionicons name="checkmark" size={18} color={t.colors.primary2} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
       </Modal>

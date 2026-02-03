@@ -57,8 +57,7 @@ export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style
           style={[
             styles.input,
             {
-              backgroundColor: t.colors.surface,
-              borderColor: t.colors.border,
+              backgroundColor: t.colors.surface2,
               color: t.colors.text,
             },
             style,
@@ -89,12 +88,11 @@ export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style
 
 const styles = StyleSheet.create({
   input: {
-    borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '400',
   },
   placeholder: {
     position: 'absolute',

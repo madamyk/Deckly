@@ -11,7 +11,7 @@ import {
   parseAndValidateDeckLanguagesJSON,
   type DeckLanguages,
 } from '@/ai/deckLanguages';
-import type { AiPrefs } from '@/domain/prefs';
+import type { AiPrefs, AiReasoningEffort } from '@/domain/prefs';
 
 export type OpenAiErrorCode =
   | 'missing_key'
@@ -102,6 +102,7 @@ export async function detectDeckLanguagesWithOpenAi(params: {
       model: params.prefs.model,
       messages,
       response_format,
+      reasoningEffort: params.prefs.reasoningEffort,
       signal: params.signal,
     });
     content = result.content;
@@ -159,6 +160,7 @@ export async function generateExamplePairWithOpenAi(params: {
     `You are a bilingual example generator.`,
     `Return STRICT JSON ONLY (no markdown, no code fences).`,
     `Output keys: example_front, example_back, note.`,
+    `Keep example sentences short (~10 words).`,
     `Do not swap or mix languages.`,
   ].join('\n');
 
@@ -194,6 +196,7 @@ export async function generateExamplePairWithOpenAi(params: {
       model: params.prefs.model,
       messages,
       response_format,
+      reasoningEffort: params.prefs.reasoningEffort,
       signal: params.signal,
     });
     content = result.content;
@@ -255,6 +258,7 @@ export async function generateExamplePairsWithOpenAi(params: {
     `You are a bilingual example generator.`,
     `Return STRICT JSON ONLY (no markdown, no code fences).`,
     `Output keys: items[].id, items[].example_front, items[].example_back, items[].note.`,
+    `Keep example sentences short (~10 words).`,
     `Do not swap or mix languages.`,
   ].join('\n');
 
@@ -300,6 +304,7 @@ export async function generateExamplePairsWithOpenAi(params: {
       model: params.prefs.model,
       messages,
       response_format,
+      reasoningEffort: params.prefs.reasoningEffort,
       signal: params.signal,
     });
     content = result.content;
@@ -349,6 +354,7 @@ export async function chatWithOpenAi(params: {
   apiKey: string;
   model: string;
   messages: ChatMessage[];
+  reasoningEffort?: AiReasoningEffort;
   signal?: AbortSignal;
 }): Promise<{ text: string; meta: OpenAiMeta }> {
   if (!params.apiKey?.trim()) throw new OpenAiError('missing_key', 'OpenAI API key is missing.');
@@ -357,6 +363,7 @@ export async function chatWithOpenAi(params: {
     model: params.model,
     messages: params.messages,
     response_format: undefined,
+    reasoningEffort: params.reasoningEffort,
     signal: params.signal,
   });
   return { text: result.content, meta: result.meta };
@@ -367,6 +374,7 @@ async function chatCompletion(params: {
   model: string;
   messages: ChatMessage[];
   response_format?: any;
+  reasoningEffort?: AiReasoningEffort;
   signal?: AbortSignal;
 }): Promise<{ content: string; meta: OpenAiMeta }> {
   const body: any = {
@@ -374,7 +382,7 @@ async function chatCompletion(params: {
     messages: params.messages,
   };
   if (supportsReasoningEffort(params.model)) {
-    body.reasoning_effort = 'low';
+    body.reasoning_effort = params.reasoningEffort ?? 'low';
   }
   if (params.response_format) {
     body.response_format = params.response_format;

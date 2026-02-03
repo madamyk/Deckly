@@ -1,9 +1,10 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Platform, Switch, View } from 'react-native';
 
 import { Row } from '@/ui/components/Row';
 import { Text } from '@/ui/components/Text';
 import { TogglePill } from '@/ui/components/TogglePill';
+import { useDecklyTheme } from '@/ui/theme/provider';
 
 type Props = {
   label: string;
@@ -28,20 +29,35 @@ export function ToggleRow({
   activeBorderColor,
   inactiveBorderColor,
 }: Props) {
+  const t = useDecklyTheme();
+
   return (
     <Row style={{ alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-      <Text style={{ fontWeight: '700' }}>{label}</Text>
+      <Text style={{ fontWeight: '500', color: t.colors.textMuted }}>{label}</Text>
       <View>
-        <TogglePill
-          value={value}
-          onToggle={onToggle}
-          activeBg={activeBg}
-          activeFg={activeFg}
-          inactiveBg={inactiveBg}
-          inactiveFg={inactiveFg}
-          activeBorderColor={activeBorderColor}
-          inactiveBorderColor={inactiveBorderColor}
-        />
+        {Platform.OS === 'ios' ? (
+          <Switch
+            value={value}
+            onValueChange={onToggle}
+            trackColor={{
+              false: inactiveBg ?? t.colors.surface2,
+              true: activeBg ?? t.colors.primaryGradientEnd,
+            }}
+            thumbColor={value ? '#FFFFFF' : '#F4F5F7'}
+            ios_backgroundColor={inactiveBg ?? t.colors.surface2}
+          />
+        ) : (
+          <TogglePill
+            value={value}
+            onToggle={onToggle}
+            activeBg={activeBg}
+            activeFg={activeFg}
+            inactiveBg={inactiveBg}
+            inactiveFg={inactiveFg}
+            activeBorderColor={activeBorderColor}
+            inactiveBorderColor={inactiveBorderColor}
+          />
+        )}
       </View>
     </Row>
   );

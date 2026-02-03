@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, View, type PressableProps } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { Text } from '@/ui/components/Text';
 import { softHaptic } from '@/ui/haptics';
@@ -38,6 +39,14 @@ export function Button({ title, variant = 'primary', left, ...rest }: Props) {
 
   const disabled = !!rest.disabled;
   const titleWeight = variant === 'primary' || variant === 'danger' ? '800' : '700';
+  const showGradient = variant === 'primary';
+  const gradientColors = useMemo(
+    () => [t.colors.primaryGradientStart, t.colors.primaryGradientEnd],
+    [t.colors.primaryGradientStart, t.colors.primaryGradientEnd],
+  );
+  const flatStyle = useMemo(() => StyleSheet.flatten(rest.style), [rest.style]);
+  const radius =
+    typeof flatStyle?.borderRadius === 'number' ? flatStyle.borderRadius : styles.base.borderRadius;
 
   return (
     <Pressable
@@ -49,14 +58,24 @@ export function Button({ title, variant = 'primary', left, ...rest }: Props) {
       style={({ pressed }) => [
         styles.base,
         {
-          backgroundColor: colors.bg,
+          backgroundColor: showGradient ? 'transparent' : colors.bg,
           // Ghost buttons get a subtle border. Destructive actions should be red text only.
           borderColor: variant === 'ghost' ? t.colors.border : 'transparent',
+          borderWidth: showGradient ? 0 : 1,
           opacity: disabled ? 0.5 : pressed ? 0.88 : 1,
         },
         rest.style as any,
       ]}
     >
+      {showGradient ? (
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+          pointerEvents="none"
+        />
+      ) : null}
       <View style={styles.inner}>
         {left}
         <Text style={{ color: colors.fg, fontWeight: titleWeight }}>{title}</Text>
@@ -69,8 +88,9 @@ const styles = StyleSheet.create({
   base: {
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 16,
+    borderRadius: 999,
     borderWidth: 1,
+    overflow: 'hidden',
   },
   inner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
 });

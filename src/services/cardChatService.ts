@@ -3,6 +3,7 @@ import { chatWithOpenAi, OpenAiError, type ChatMessage } from '@/ai/openaiClient
 import { appendAiDebugEntry } from '@/ai/debugLog';
 import { isSlowOpenAi } from '@/ai/telemetry';
 import type { Card } from '@/domain/models';
+import type { AiReasoningEffort } from '@/domain/prefs';
 import { getAiApiKey } from '@/data/secureStore';
 import { usePrefsStore } from '@/stores/prefsStore';
 import { ensureDeckLanguages } from '@/services/deckLanguageService';
@@ -15,9 +16,13 @@ export async function sendCardChatMessage(params: {
   question: string;
   history?: ChatHistoryItem[];
   extraSystemInstruction?: string | null;
+  modelOverride?: string;
+  reasoningEffortOverride?: AiReasoningEffort;
   signal?: AbortSignal;
 }): Promise<string> {
   const prefs = usePrefsStore.getState().prefs.ai;
+  const model = params.modelOverride ?? prefs.model;
+  const reasoningEffort = params.reasoningEffortOverride ?? prefs.reasoningEffort;
   if (!prefs.enabled) throw new OpenAiError('disabled', 'AI Assist is turned off. Enable it in Settings.');
   const apiKey = await getAiApiKey();
   if (!apiKey) throw new OpenAiError('missing_key', 'OpenAI API key is missing. Add it in Settings.');
@@ -58,8 +63,9 @@ export async function sendCardChatMessage(params: {
   try {
     const reply = await chatWithOpenAi({
       apiKey,
-      model: prefs.model,
+      model,
       messages,
+      reasoningEffort,
       signal: params.signal,
     });
     if (isSlowOpenAi(reply.meta)) {
@@ -70,7 +76,7 @@ export async function sendCardChatMessage(params: {
         cardId: params.card.id,
         front: params.card.front,
         back: params.card.back,
-        model: prefs.model,
+        model,
         durationMs: reply.meta.durationMs,
         processingMs: reply.meta.processingMs,
         requestId: reply.meta.requestId,
@@ -86,7 +92,7 @@ export async function sendCardChatMessage(params: {
       cardId: params.card.id,
       front: params.card.front,
       back: params.card.back,
-      model: prefs.model,
+      model,
       errorCode: oe?.code ?? 'unknown',
       errorMessage: oe?.message ?? String(e?.message ?? e ?? 'Failed'),
       status: oe?.status,

@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Papa from 'papaparse';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -12,6 +13,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Switch,
   View,
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -24,11 +26,11 @@ import { generateAndPersistExamplePairs } from '@/services/examplePairService';
 import { ensureDeckLanguages } from '@/services/deckLanguageService';
 import { useImportResultStore } from '@/stores/importResultStore';
 import { Button } from '@/ui/components/Button';
+import { InfoModal } from '@/ui/components/InfoModal';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
 import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
-import { TogglePill } from '@/ui/components/TogglePill';
 import { useDecklyTheme } from '@/ui/theme/provider';
 import { usePrefsStore } from '@/stores/prefsStore';
 
@@ -52,6 +54,7 @@ function normalizeHeaderCell(v: string): string {
 
 export default function ImportCsvScreen() {
   const t = useDecklyTheme();
+  const navigation = useNavigation();
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const { prefs } = usePrefsStore();
 
@@ -65,8 +68,7 @@ export default function ImportCsvScreen() {
   const [exampleL2Col, setExampleL2Col] = useState<number | null>(null);
 
   const [aiKeyPresent, setAiKeyPresent] = useState(false);
-  const [generateMissing, setGenerateMissing] = useState(false);
-  const [regenerateAll, setRegenerateAll] = useState(false);
+  const [generateExamples, setGenerateExamples] = useState(false);
   const [aiTogglesTouched, setAiTogglesTouched] = useState(false);
 
   const [importing, setImporting] = useState(false);
@@ -77,6 +79,8 @@ export default function ImportCsvScreen() {
     null,
   );
   const abortRef = useRef<AbortController | null>(null);
+  const cancelRequestedRef = useRef(false);
+  const allowNavRef = useRef(false);
   const progressFrac = useSharedValue(0);
   const progressBarWidth = useSharedValue(0);
 
@@ -125,6 +129,47 @@ export default function ImportCsvScreen() {
     };
   }, []);
 
+  async function rollbackImport(createdIds: string[]) {
+    if (!createdIds.length) return;
+    await Promise.all(createdIds.map((id) => cardsRepo.softDeleteCard(id)));
+  }
+
+  const confirmCancelImport = React.useCallback(() => {
+    Alert.alert(
+      'Cancel import?',
+      'Leaving now will stop the import and discard any remaining progress.',
+      [
+        { text: 'Keep importing', style: 'cancel' },
+        {
+          text: 'Stop import',
+          style: 'destructive',
+          onPress: () => {
+            cancelRequestedRef.current = true;
+            allowNavRef.current = true;
+            if (importPhase === 'detecting_languages' || importPhase === 'generating_examples') {
+              abortRef.current?.abort();
+            }
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace({ pathname: '/deck/[deckId]', params: { deckId } });
+            }
+          },
+        },
+      ],
+    );
+  }, [importPhase, router, deckId]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (allowNavRef.current) return;
+      if (!importing) return;
+      e.preventDefault();
+      confirmCancelImport();
+    });
+    return unsubscribe;
+  }, [navigation, importing, confirmCancelImport]);
+
   function setFrontColSafe(next: number | null) {
     setFrontCol((prevFront) => {
       if (next != null && next === backCol) {
@@ -147,29 +192,23 @@ export default function ImportCsvScreen() {
   }
 
   // Default AI toggle behavior:
-  // - If AI is off (or key missing), keep both off.
-  // - If AI is on + key present, default to "Generate missing" (especially useful when CSV provides example columns).
-  // - Don't fight the user if they manually pick a mode.
+  // - If AI is off (or key missing), keep off.
+  // - If AI is on + key present, default to "Generate examples".
+  // - Don't fight the user if they manually toggle.
   useEffect(() => {
     if (!parsed) {
-      setGenerateMissing(false);
-      setRegenerateAll(false);
+      setGenerateExamples(false);
       setAiTogglesTouched(false);
       return;
     }
     if (!prefs.ai.enabled || !aiKeyPresent) {
-      setGenerateMissing(false);
-      setRegenerateAll(false);
+      setGenerateExamples(false);
       setAiTogglesTouched(false);
       return;
     }
     if (aiTogglesTouched) return;
-
-    // If user mapped example columns, we want to fill the missing ones by default.
-    // If no example columns are mapped, "missing" still means "all", so it's a good default.
-    setGenerateMissing(true);
-    setRegenerateAll(false);
-  }, [parsed, prefs.ai.enabled, aiKeyPresent, exampleL1Col, exampleL2Col, aiTogglesTouched]);
+    setGenerateExamples(true);
+  }, [parsed, prefs.ai.enabled, aiKeyPresent, aiTogglesTouched]);
 
   async function pickCsv() {
     const res = await DocumentPicker.getDocumentAsync({
@@ -244,27 +283,30 @@ export default function ImportCsvScreen() {
       return;
     }
 
-    if ((generateMissing || regenerateAll) && !prefs.ai.enabled) {
+    if (generateExamples && !prefs.ai.enabled) {
       Alert.alert('Deckly', 'AI Assist is turned off. Enable it in Settings to generate examples.');
       return;
     }
-    if ((generateMissing || regenerateAll) && !aiKeyPresent) {
+    if (generateExamples && !aiKeyPresent) {
       Alert.alert('Deckly', 'To generate examples, add your OpenAI API key in Settings.');
       return;
     }
-    if (regenerateAll) {
+    if (generateExamples && (exampleL1Col != null || exampleL2Col != null)) {
       const proceed = await new Promise<boolean>((resolve) => {
         Alert.alert(
-          'Regenerate all examples?',
-          'This will overwrite any examples provided in the CSV for the imported cards.',
+          'Overwrite CSV examples?',
+          'AI will generate examples for all imported cards and overwrite any example columns in the CSV.',
           [
             { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Regenerate', style: 'destructive', onPress: () => resolve(true) },
+            { text: 'Generate', style: 'destructive', onPress: () => resolve(true) },
           ],
         );
       });
       if (!proceed) return;
     }
+
+    cancelRequestedRef.current = false;
+    allowNavRef.current = false;
 
     setImporting(true);
     setImportPhase('writing_cards');
@@ -319,7 +361,12 @@ export default function ImportCsvScreen() {
         });
       }
 
-      const { created } = await cardsRepo.createManyCards({ deckId, items });
+      const { created, createdIds } = await cardsRepo.createManyCards({ deckId, items });
+
+      if (cancelRequestedRef.current) {
+        await rollbackImport(createdIds);
+        return;
+      }
 
       let examplesTotal = 0;
       let examplesDone = 0;
@@ -327,7 +374,7 @@ export default function ImportCsvScreen() {
       let examplesCancelled = 0;
       let failureSummary = '';
 
-      if ((generateMissing || regenerateAll) && created > 0) {
+      if (generateExamples && created > 0 && !cancelRequestedRef.current) {
         setImportPhase('detecting_languages');
         const controller = new AbortController();
         abortRef.current = controller;
@@ -354,8 +401,8 @@ export default function ImportCsvScreen() {
           exampleL2: it.exampleL2 ?? null,
         }));
 
-        const mode = regenerateAll ? 'all' : 'missing';
-        examplesTotal = mode === 'all' ? cardsForGen.length : cardsForGen.filter((c) => !c.exampleL1 || !c.exampleL2).length;
+        const mode = 'all';
+        examplesTotal = cardsForGen.length;
         setGenProgress({ done: 0, total: examplesTotal, failed: 0 });
 
         try {
@@ -387,6 +434,11 @@ export default function ImportCsvScreen() {
         }
       }
 
+      if (cancelRequestedRef.current) {
+        await rollbackImport(createdIds);
+        return;
+      }
+
       // Go back to the deck and show a success notification there.
       useImportResultStore.getState().setResult({
         deckId,
@@ -399,6 +451,7 @@ export default function ImportCsvScreen() {
         examplesCancelled,
         examplesFailureSummary: failureSummary,
       });
+      allowNavRef.current = true;
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -424,7 +477,7 @@ export default function ImportCsvScreen() {
   const mappedPreview = useMemo(() => {
     const take = dataRows.slice(0, 3);
     const aiReady = prefs.ai.enabled && aiKeyPresent;
-    const aiMode = aiReady && (generateMissing || regenerateAll);
+    const aiMode = aiReady && generateExamples;
     return take.map((row) => {
       const front = frontCol == null ? '' : String(row[frontCol] ?? '');
       const back = backCol == null ? '' : String(row[backCol] ?? '');
@@ -434,8 +487,8 @@ export default function ImportCsvScreen() {
       const exampleFront = exampleFrontRaw.trim() ? exampleFrontRaw : '';
       const exampleBack = exampleBackRaw.trim() ? exampleBackRaw : '';
 
-      const willGenerateFront = aiMode && (regenerateAll || !exampleFront.trim());
-      const willGenerateBack = aiMode && (regenerateAll || !exampleBack.trim());
+      const willGenerateFront = aiMode;
+      const willGenerateBack = aiMode;
 
       return {
         front,
@@ -454,13 +507,36 @@ export default function ImportCsvScreen() {
     exampleL2Col,
     prefs.ai.enabled,
     aiKeyPresent,
-    generateMissing,
-    regenerateAll,
+    generateExamples,
   ]);
 
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
-      <Stack.Screen options={{ title: 'Import CSV' }} />
+      <Stack.Screen
+        options={{
+          title: 'Import CSV',
+          gestureEnabled: !importing,
+          headerLeft: () => (
+            <Pressable
+              hitSlop={10}
+              onPress={() => {
+                if (importing) {
+                  confirmCancelImport();
+                } else {
+                  router.back();
+                }
+              }}
+              style={({ pressed }) => ({
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <Ionicons name="chevron-back" size={22} color={t.colors.text} />
+            </Pressable>
+          ),
+        }}
+      />
       {!parsed ? (
         <View style={{ flex: 1, padding: t.spacing.lg, justifyContent: 'center' }}>
           <View style={{ gap: 12, alignItems: 'center' }}>
@@ -512,12 +588,12 @@ export default function ImportCsvScreen() {
 
               <Row>
                 <Text variant="label">First row is header</Text>
-                <TogglePill
+                <Switch
                   value={hasHeader}
-                  onToggle={(next) => setHasHeader(next)}
-                  activeBg={t.colors.primary}
-                  activeFg="#fff"
-                  inactiveBg={t.colors.surface2}
+                  onValueChange={(next) => setHasHeader(next)}
+                  trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                  thumbColor={hasHeader ? '#FFFFFF' : '#F4F5F7'}
+                  ios_backgroundColor={t.colors.surface2}
                 />
               </Row>
 
@@ -532,18 +608,18 @@ export default function ImportCsvScreen() {
                     <Ionicons name="information-circle-outline" size={18} color={t.colors.textMuted} />
                   </Pressable>
                 </View>
-                <TogglePill
+                <Switch
                   value={dedupe}
-                  onToggle={(next) => setDedupe(next)}
-                  activeBg={t.colors.primary2}
-                  activeFg={t.scheme === 'dark' ? '#05211C' : '#04201C'}
-                  inactiveBg={t.colors.surface2}
+                  onValueChange={(next) => setDedupe(next)}
+                  trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                  thumbColor={dedupe ? '#FFFFFF' : '#F4F5F7'}
+                  ios_backgroundColor={t.colors.surface2}
                 />
               </Row>
 
               <View style={{ gap: 10 }}>
                 <ColumnSelect
-                  label="Front column"
+                  label="Front"
                   value={frontCol}
                   items={colItems}
                   onChange={setFrontColSafe}
@@ -552,7 +628,7 @@ export default function ImportCsvScreen() {
 
               <View style={{ gap: 10 }}>
                 <ColumnSelect
-                  label="Back column"
+                  label="Back"
                   value={backCol}
                   items={colItems}
                   onChange={setBackColSafe}
@@ -561,7 +637,7 @@ export default function ImportCsvScreen() {
 
               <View style={{ gap: 10 }}>
                 <ColumnSelect
-                  label="Example front column (optional)"
+                  label="Example front"
                   value={exampleL1Col}
                   items={colItems}
                   onChange={(v) => setExampleL1Col(v)}
@@ -570,7 +646,7 @@ export default function ImportCsvScreen() {
 
               <View style={{ gap: 10 }}>
                 <ColumnSelect
-                  label="Example back column (optional)"
+                  label="Example back"
                   value={exampleL2Col}
                   items={colItems}
                   onChange={(v) => setExampleL2Col(v)}
@@ -579,10 +655,7 @@ export default function ImportCsvScreen() {
 
               <View style={{ height: 4 }} />
 
-              <Text variant="h2">AI examples</Text>
-              <Text variant="muted">
-                Generate bilingual example pairs using your OpenAI key. Languages are inferred from your Front/Back text.
-              </Text>
+              <View style={{ height: 8 }} />
 
               {importing && importPhase === 'detecting_languages' ? (
                 <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -593,8 +666,29 @@ export default function ImportCsvScreen() {
 
               {!prefs.ai.enabled ? (
                 <View style={{ gap: 10 }}>
-                  <Text variant="muted">AI Assist is currently turned off.</Text>
-                  <Button title="Enable AI Assist" variant="secondary" onPress={() => router.push('/settings/ai')} />
+                  <Row>
+                    <Text variant="label">Use AI Assist</Text>
+                    <Switch
+                      value={false}
+                      disabled
+                      trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                      thumbColor="#F4F5F7"
+                      ios_backgroundColor={t.colors.surface2}
+                    />
+                  </Row>
+                  <Text variant="muted" style={{ fontSize: 12 }}>
+                    Generates bilingual example pairs and short notes using your OpenAI key based on Front/Back text.
+                  </Text>
+                  <Text variant="muted" style={{ fontSize: 12 }}>
+                    Enable AI Assist in Settings — tap{' '}
+                    <Text
+                      style={{ textDecorationLine: 'underline', color: t.colors.primary, fontSize: 12 }}
+                      onPress={() => router.push('/settings/ai')}
+                    >
+                      here
+                    </Text>
+                    .
+                  </Text>
                 </View>
               ) : !aiKeyPresent ? (
                 <Button
@@ -605,36 +699,21 @@ export default function ImportCsvScreen() {
               ) : (
                 <View style={{ gap: 10 }}>
                   <Row>
-                    <Text variant="label">Generate missing examples (AI)</Text>
-                    <TogglePill
-                      value={generateMissing}
-                      onToggle={(next) => {
+                    <Text variant="label">Use AI Assist</Text>
+                    <Switch
+                      value={generateExamples}
+                      onValueChange={(next) => {
                         setAiTogglesTouched(true);
-                        setGenerateMissing(next);
-                        if (next) setRegenerateAll(false);
+                        setGenerateExamples(next);
                       }}
-                      activeBg={t.colors.primary2}
-                      activeFg={t.scheme === 'dark' ? '#05211C' : '#FFFFFF'}
-                      inactiveBg={t.colors.surface}
-                      inactiveBorderColor={t.colors.border}
+                      trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                      thumbColor={generateExamples ? '#FFFFFF' : '#F4F5F7'}
+                      ios_backgroundColor={t.colors.surface2}
                     />
                   </Row>
-
-                  <Row>
-                    <Text variant="label">Regenerate all examples (AI)</Text>
-                    <TogglePill
-                      value={regenerateAll}
-                      onToggle={(next) => {
-                        setAiTogglesTouched(true);
-                        setRegenerateAll(next);
-                        if (next) setGenerateMissing(false);
-                      }}
-                      activeBg={t.colors.warning}
-                      activeFg={t.scheme === 'dark' ? '#241500' : '#FFFFFF'}
-                      inactiveBg={t.colors.surface}
-                      inactiveBorderColor={t.colors.border}
-                    />
-                  </Row>
+                  <Text variant="muted" style={{ fontSize: 12 }}>
+                    Generates bilingual example pairs and short notes using your OpenAI key based on Front/Back text.
+                  </Text>
                 </View>
               )}
 
@@ -695,7 +774,7 @@ export default function ImportCsvScreen() {
               <Button
                 title={importing ? 'Importing...' : 'Import into deck'}
                 onPress={doImport}
-                disabled={importing}
+                disabled={importing || frontCol == null || backCol == null}
               />
             </View>
 
@@ -762,10 +841,10 @@ export default function ImportCsvScreen() {
                                 }}
                                 numberOfLines={2}
                               >
-                                {r.exampleFront
-                                  ? r.exampleFront
-                                  : r.willGenerateFront
-                                    ? 'AI will generate on import'
+                                {r.willGenerateFront
+                                  ? 'AI will generate on import'
+                                  : r.exampleFront
+                                    ? r.exampleFront
                                     : '—'}
                               </Text>
                             </View>
@@ -784,10 +863,10 @@ export default function ImportCsvScreen() {
                                 }}
                                 numberOfLines={2}
                               >
-                                {r.exampleBack
-                                  ? r.exampleBack
-                                  : r.willGenerateBack
-                                    ? 'AI will generate on import'
+                                {r.willGenerateBack
+                                  ? 'AI will generate on import'
+                                  : r.exampleBack
+                                    ? r.exampleBack
                                     : '—'}
                               </Text>
                             </View>
@@ -803,35 +882,17 @@ export default function ImportCsvScreen() {
 	        </ScrollView>
 	      )}
 
-      <Modal
-        visible={dedupeInfoOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDedupeInfoOpen(false)}
-      >
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
-          <Pressable
-            onPress={() => setDedupeInfoOpen(false)}
-            style={{
-              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
-              backgroundColor: 'rgba(0,0,0,0.55)',
-            }}
-          />
-          <Surface radius={22} style={{ gap: 10, padding: 16 }}>
-            <Text variant="h2">Deduplicate</Text>
-            <Text variant="muted">
-              When enabled, Deckly skips importing any row that would create a card with the same
-              Front + Back as an existing card in this deck. It also skips duplicates inside the
-              CSV itself.
-            </Text>
-            <Text variant="muted">
-              This is an exact match check after trimming whitespace. Examples/notes are not part of
-              the match.
-            </Text>
-            <Button title="Got it" variant="secondary" onPress={() => setDedupeInfoOpen(false)} />
-          </Surface>
-        </View>
-      </Modal>
+      <InfoModal visible={dedupeInfoOpen} title="Deduplicate" onClose={() => setDedupeInfoOpen(false)}>
+        <Text variant="muted">
+          When enabled, Deckly skips importing any row that would create a card with the same
+          Front + Back as an existing card in this deck. It also skips duplicates inside the CSV
+          itself.
+        </Text>
+        <Text variant="muted">
+          This is an exact match check after trimming whitespace. Examples/notes are not part of the
+          match.
+        </Text>
+      </InfoModal>
     </Screen>
   );
 }
@@ -874,9 +935,9 @@ function ColumnSelect(props: {
             );
           }}
           style={({ pressed }) => ({
-            maxWidth: 220,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
+            maxWidth: 190,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
             borderRadius: 999,
             backgroundColor: t.colors.surface,
             borderWidth: 1,
@@ -887,10 +948,10 @@ function ColumnSelect(props: {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text numberOfLines={1} style={{ flex: 1, paddingRight: 10, fontWeight: '800' }}>
+          <Text numberOfLines={1} style={{ flex: 1, paddingRight: 8, fontWeight: '800', fontSize: 13 }}>
             {selected}
           </Text>
-          <Ionicons name="chevron-down" size={16} color={t.colors.textMuted} />
+          <Ionicons name="chevron-down" size={14} color={t.colors.textMuted} />
         </Pressable>
         </Row>
       </View>
@@ -907,9 +968,9 @@ function ColumnSelect(props: {
         <Pressable
           onPress={() => setOpen(true)}
           style={({ pressed }) => ({
-            maxWidth: 220,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
+            maxWidth: 190,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
             borderRadius: 999,
             backgroundColor: t.colors.surface,
             borderWidth: 1,
@@ -920,10 +981,10 @@ function ColumnSelect(props: {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text numberOfLines={1} style={{ flex: 1, paddingRight: 10, fontWeight: '800' }}>
+          <Text numberOfLines={1} style={{ flex: 1, paddingRight: 8, fontWeight: '800', fontSize: 13 }}>
             {selected}
           </Text>
-          <Ionicons name="chevron-down" size={16} color={t.colors.textMuted} />
+          <Ionicons name="chevron-down" size={14} color={t.colors.textMuted} />
         </Pressable>
       </Row>
 

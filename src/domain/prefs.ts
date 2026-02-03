@@ -5,11 +5,13 @@ export type ReviewPrefs = {
 };
 
 export type AiExampleLevel = 'easy' | 'medium' | 'advanced';
+export type AiReasoningEffort = 'low' | 'medium' | 'high';
 export type AiPrefs = {
   enabled: boolean;
   provider: 'openai';
   model: string;
   level: AiExampleLevel;
+  reasoningEffort: AiReasoningEffort;
 };
 
 export type AppPrefs = {
@@ -29,5 +31,6 @@ export const DEFAULT_PREFS: AppPrefs = {
     // Keep as a string so users can adjust to whatever their account supports.
     model: 'gpt-5',
     level: 'medium',
+    reasoningEffort: 'low',
   },
 };

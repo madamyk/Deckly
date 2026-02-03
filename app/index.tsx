@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, View } from 'react-native';
@@ -63,14 +64,16 @@ export default function HomeScreen() {
 
       <View style={{ marginBottom: t.spacing.lg, gap: 10 }}>
         <Row style={{ alignItems: 'center' }}>
-          <Text variant="title">Deckly</Text>
+          <Text variant="title" style={{ fontSize: 40, lineHeight: 44 }}>
+            Deckly
+          </Text>
           <Pressable
             hitSlop={10}
             onPress={() => router.push('/settings')}
             style={{
               paddingHorizontal: 10,
               paddingVertical: 10,
-              borderRadius: 16,
+              borderRadius: 999,
               backgroundColor: t.colors.surface2,
               borderWidth: 1,
               borderColor: t.colors.border,
@@ -88,8 +91,8 @@ export default function HomeScreen() {
             maxWidth: 320,
           }}
         >
-          Offline-first flashcards with spaced repetition, plus optional AI-generated example pairs
-          you can save and review later.
+          Offline-first flashcards with spaced repetition, plus AI-generated examples and notes you
+          can save and review later.
         </Text>
       </View>
 
@@ -117,6 +120,7 @@ export default function HomeScreen() {
                           marginTop: 5,
                           backgroundColor:
                             resolveDeckAccentColor(item.accentColor) ?? t.colors.primary,
+                          opacity: (statsByDeckId[item.id]?.due ?? 0) > 0 ? 1 : 0.7,
                         }}
                       />
                       <Text variant="h2" numberOfLines={1} style={{ flex: 1 }}>
@@ -124,9 +128,14 @@ export default function HomeScreen() {
                       </Text>
                     </Row>
                     <View style={{ height: 6 }} />
-                    <Text variant="muted">
-                      {statsByDeckId[item.id]?.total ?? 0} cards total
-                    </Text>
+                    {(() => {
+                      const total = statsByDeckId[item.id]?.total ?? 0;
+                      return (
+                        <Text variant="muted">
+                          {total} {total === 1 ? 'card' : 'cards'} total
+                        </Text>
+                      );
+                    })()}
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text variant="label" style={{ color: t.colors.textMuted }}>
@@ -171,30 +180,31 @@ export default function HomeScreen() {
           paddingBottom: 10 + insets.bottom,
         }}
       >
-        <View
-          style={{
-            alignSelf: 'center',
-            borderRadius: 999,
-            paddingVertical: 12,
-            paddingHorizontal: 18,
-            backgroundColor: t.colors.primary,
-            shadowColor: t.colors.shadow,
-            shadowOpacity: 0.22,
-            shadowRadius: 18,
-            shadowOffset: { width: 0, height: 12 },
-            elevation: 6,
-          }}
+        <Pressable
+          onPress={() => router.push('/deck/new')}
+          style={({ pressed }) => [{ alignSelf: 'center', opacity: pressed ? 0.9 : 1 }]}
         >
-          <Pressable
-            onPress={() => router.push('/deck/new')}
-            style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
+          <LinearGradient
+            colors={[t.colors.primaryGradientStart, t.colors.primaryGradientEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 999,
+              paddingVertical: 12,
+              paddingHorizontal: 18,
+              shadowColor: t.colors.shadow,
+              shadowOpacity: 0.22,
+              shadowRadius: 18,
+              shadowOffset: { width: 0, height: 12 },
+              elevation: 6,
+            }}
           >
             <Row gap={8} style={{ justifyContent: 'center' }}>
               <Ionicons name="add" size={18} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: '900' }}>New deck</Text>
             </Row>
-          </Pressable>
-        </View>
+          </LinearGradient>
+        </Pressable>
       </View>
     </Screen>
   );

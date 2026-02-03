@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
-import { View } from 'react-native';
+import { View, type TextStyle, type ViewStyle } from 'react-native';
 
 import { Button } from '@/ui/components/Button';
 import { Text } from '@/ui/components/Text';
@@ -12,10 +12,14 @@ export function EmptyState(props: {
   message?: string;
   actionTitle?: string;
   onAction?: () => void;
+  gap?: number;
+  messageStyle?: TextStyle;
+  style?: ViewStyle;
 }) {
   const t = useDecklyTheme();
+  const gap = props.gap ?? 12;
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+    <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', gap }, props.style]}>
       {props.iconName ? (
         <View
           style={{
@@ -37,7 +41,10 @@ export function EmptyState(props: {
         {props.title}
       </Text>
       {props.message ? (
-        <Text variant="muted" style={{ textAlign: 'center', maxWidth: 320 }}>
+        <Text
+          variant="muted"
+          style={[{ textAlign: 'center', maxWidth: 320 }, props.messageStyle]}
+        >
           {props.message}
         </Text>
       ) : null}

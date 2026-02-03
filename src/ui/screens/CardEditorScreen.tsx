@@ -1,24 +1,26 @@
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack, router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
+import { getDeck } from '@/data/repositories/decksRepo';
 import { getAiApiKey } from '@/data/secureStore';
-import { getExampleLevel } from '@/data/repositories/deckPrefsRepo';
 import type { Card, ExampleSource } from '@/domain/models';
-import type { AiExampleLevel } from '@/domain/prefs';
 import { generateExamplePair } from '@/services/examplePairService';
 import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
-import { Input } from '@/ui/components/Input';
-import { LevelPicker } from '@/ui/components/LevelPicker';
-import { Pill } from '@/ui/components/Pill';
 import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
+import { Input } from '@/ui/components/Input';
+import { Pill } from '@/ui/components/Pill';
 import { Screen } from '@/ui/components/Screen';
+import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
 import { useKeyboardVisible } from '@/ui/hooks/useKeyboardVisible';
+import { resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
 import { formatShortDateTime, nowMs } from '@/utils/time';
 
@@ -30,6 +32,7 @@ export function CardEditorScreen(props: {
   const t = useDecklyTheme();
   const ai = usePrefsStore((s) => s.prefs.ai);
   const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
   const [card, setCard] = useState<Card | null>(null);
   const [initialFront, setInitialFront] = useState('');
@@ -50,7 +53,7 @@ export function CardEditorScreen(props: {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [aiKeyPresent, setAiKeyPresent] = useState(false);
-  const [exampleLevel, setExampleLevel] = useState<AiExampleLevel>(ai.level);
+  const [accentColor, setAccentColor] = useState<string | null>(null);
   const progressTrackW = useSharedValue(0);
   const progressT = useSharedValue(0);
 
@@ -107,11 +110,10 @@ export function CardEditorScreen(props: {
 
   useEffect(() => {
     (async () => {
-      const level = await getExampleLevel(props.deckId);
-      if (level) setExampleLevel(level);
-      else setExampleLevel(ai.level);
+      const d = await getDeck(props.deckId);
+      setAccentColor(resolveDeckAccentColor(d?.accentColor) ?? null);
     })();
-  }, [props.deckId, ai.level]);
+  }, [props.deckId]);
 
   useEffect(() => {
     (async () => {
@@ -124,13 +126,17 @@ export function CardEditorScreen(props: {
     props.mode === 'create'
       ? front.length > 0 || back.length > 0 || exampleL1.length > 0 || exampleL2.length > 0 || exampleNote.length > 0
       : front !== initialFront ||
-        back !== initialBack ||
-        exampleL1 !== initialExampleL1 ||
-        exampleL2 !== initialExampleL2 ||
-        exampleNote !== initialExampleNote ||
-        exampleSource !== initialExampleSource ||
-        exampleGeneratedAt !== initialExampleGeneratedAt;
+      back !== initialBack ||
+      exampleL1 !== initialExampleL1 ||
+      exampleL2 !== initialExampleL2 ||
+      exampleNote !== initialExampleNote ||
+      exampleSource !== initialExampleSource ||
+      exampleGeneratedAt !== initialExampleGeneratedAt;
   const canSave = !saving && isDirty && front.trim().length > 0 && back.trim().length > 0;
+  const hasExampleContent = !!(exampleL1.trim() || exampleL2.trim() || exampleNote.trim());
+  const canGenerate = front.trim().length > 0 && back.trim().length > 0;
+  const optionalInputStyle = { backgroundColor: t.colors.surface };
+  const accentProgress = accentColor ?? t.colors.primary2;
 
   async function save() {
     const f = front.trim();
@@ -204,7 +210,6 @@ export function CardEditorScreen(props: {
         deckId: props.deckId,
         frontText: f,
         backText: b,
-        levelOverride: exampleLevel,
       });
       setExampleL1(patch.exampleL1 ?? '');
       setExampleL2(patch.exampleL2 ?? '');
@@ -219,14 +224,18 @@ export function CardEditorScreen(props: {
   }
 
   function generate() {
-    Alert.alert(
-      'Generate content?',
-      'This will overwrite the current examples and note for this card.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Generate', onPress: generateConfirmed },
-      ],
-    );
+    if (hasExampleContent) {
+      Alert.alert(
+        props.mode === 'edit' ? 'Regenerate content?' : 'Generate content?',
+        'This will overwrite the current examples and note for this card.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: props.mode === 'edit' ? 'Regenerate' : 'Generate', onPress: generateConfirmed },
+        ],
+      );
+      return;
+    }
+    generateConfirmed();
   }
 
   async function del() {
@@ -247,7 +256,27 @@ export function CardEditorScreen(props: {
   return (
     // With a native Stack header, avoid top safe-area padding (it creates a "blank band" below the header).
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
-      <Stack.Screen options={{ title: props.mode === 'create' ? 'New Card' : 'Edit Card' }} />
+      <Stack.Screen
+        options={{
+          title: props.mode === 'create' ? 'New Card' : 'Edit Card',
+          headerRight: () => (
+            <Pressable
+              onPress={save}
+              disabled={!canSave}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                paddingHorizontal: 6,
+                paddingVertical: 4,
+                opacity: !canSave ? 0.4 : pressed ? 0.6 : 1,
+              })}
+            >
+              <Text style={{ color: canSave ? '#FFFFFF' : t.colors.textMuted, fontWeight: '700' }}>
+                {saving ? 'Saving...' : 'Save'}
+              </Text>
+            </Pressable>
+          ),
+        }}
+      />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -257,159 +286,175 @@ export function CardEditorScreen(props: {
         <ScrollView
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 40 }}
+          contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: t.spacing.lg + insets.bottom }}
         >
           <View style={{ gap: 14 }}>
-            <Input label="Front" value={front} onChangeText={setFront} placeholder="Prompt..." />
-            <Input label="Back" value={back} onChangeText={setBack} placeholder="Answer..." />
-            <View style={{ gap: 10 }}>
-              <View style={{ gap: 6 }}>
-                <Text variant="label">Example level</Text>
-                <LevelPicker value={exampleLevel} onChange={setExampleLevel} />
-              </View>
-              <Button
-                title={generating ? 'Generating...' : 'Generate content'}
-                variant="secondary"
-                onPress={generate}
-                disabled={generating || !ai.enabled || !aiKeyPresent}
+            <Input
+              label="Front"
+              value={front}
+              onChangeText={setFront}
+              placeholder="Prompt"
+              editable={!generating}
+            />
+            <Input
+              label="Back"
+              value={back}
+              onChangeText={setBack}
+              placeholder="Answer"
+              editable={!generating}
+            />
+            <View style={{ gap: 8, marginTop: 6 }}>
+              <Text variant="label" style={{ color: t.colors.textMuted, opacity: 0.7 }}>
+                Optional
+              </Text>
+              <Surface
+                radius={18}
+                tone="muted"
+                border={false}
+                style={{
+                  gap: 12,
+                  paddingVertical: 16,
+                  paddingHorizontal: t.spacing.lg,
+                  marginHorizontal: -t.spacing.lg,
+                }}
+              >
+              <Input
+                label="Example front"
+                value={exampleL1}
+                onChangeText={(v) => {
+                  setExampleL1(v);
+                  if (!exampleSource) setExampleSource('user');
+                }}
+                placeholder="Example on the front side"
+                editable={!generating}
+                multiline
+                style={[{ minHeight: 70, textAlignVertical: 'top' }, optionalInputStyle]}
               />
-              {generating ? (
-                <View style={{ gap: 10 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <ActivityIndicator color={t.colors.textMuted} />
+              <Input
+                label="Example back"
+                value={exampleL2}
+                onChangeText={(v) => {
+                  setExampleL2(v);
+                  if (!exampleSource) setExampleSource('user');
+                }}
+                placeholder="Example on the back side"
+                editable={!generating}
+                multiline
+                style={[{ minHeight: 70, textAlignVertical: 'top' }, optionalInputStyle]}
+              />
+              <Input
+                label="Note"
+                value={exampleNote}
+                onChangeText={(v) => {
+                  setExampleNote(v);
+                  if (!exampleSource) setExampleSource('user');
+                }}
+                placeholder="Pitfall / regional note"
+                editable={!generating}
+                multiline
+                style={[{ minHeight: 60, textAlignVertical: 'top' }, optionalInputStyle]}
+              />
+
+              <View style={{ gap: 10 }}>
+                {generating ? (
+                  <View style={{ gap: 10 }}>
                     <Text variant="muted">Generating content…</Text>
-                  </View>
-                  <View style={{ borderRadius: 999, backgroundColor: t.colors.border, padding: 1 }}>
-                    <View
-                      style={{
-                        height: 8,
-                        borderRadius: 999,
-                        backgroundColor: t.colors.surface2,
-                        overflow: 'hidden',
-                      }}
-                      onLayout={(e) => {
-                        progressTrackW.value = e.nativeEvent.layout.width;
-                      }}
-                    >
-                      <Animated.View
-                        style={[
-                          {
-                            height: '100%',
-                            borderRadius: 999,
-                            backgroundColor: t.colors.primary2,
-                          },
-                          progressThumbStyle,
-                        ]}
-                      />
+                    <View style={{ borderRadius: 999, backgroundColor: t.colors.border, padding: 1 }}>
+                      <View
+                        style={{
+                          height: 8,
+                          borderRadius: 999,
+                          backgroundColor: t.colors.surface2,
+                          overflow: 'hidden',
+                        }}
+                        onLayout={(e) => {
+                          progressTrackW.value = e.nativeEvent.layout.width;
+                        }}
+                      >
+                        <Animated.View
+                          style={[
+                            {
+                              height: '100%',
+                              borderRadius: 999,
+                              backgroundColor: accentProgress,
+                            },
+                            progressThumbStyle,
+                          ]}
+                        />
+                      </View>
                     </View>
                   </View>
-                </View>
-              ) : genError ? (
-                <View style={{ gap: 8 }}>
-                  <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{genError}</Text>
-                  <Pressable
-                    onPress={() => router.push('/settings/ai-debug')}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-                    hitSlop={8}
+                ) : (
+                  <Button
+                    title={props.mode === 'edit' && hasExampleContent ? 'Regenerate content' : 'Generate content'}
+                    variant="secondary"
+                    left={<Ionicons name="sparkles-outline" size={18} color={t.colors.text} />}
+                    onPress={generate}
+                    disabled={!ai.enabled || !aiKeyPresent || !canGenerate}
+                  />
+                )}
+                {genError ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{genError}</Text>
+                    <Pressable
+                      onPress={() => router.push('/settings/ai-debug')}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                      hitSlop={8}
+                    >
+                      <Text variant="muted" style={{ textDecorationLine: 'underline', }}>
+                        View AI debug logs
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {!ai.enabled ? (
+                  <Text
+                    style={{ color: t.colors.textMuted, fontWeight: '700' }}
+                    onPress={() => router.push('/settings/ai')}
                   >
-                    <Text variant="muted" style={{ textDecorationLine: 'underline' }}>
-                      View AI debug logs
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Text variant="muted">
-                  Generates example front/back using detected deck languages.
-                </Text>
-              )}
-              {!ai.enabled ? (
-                <Text
-                  style={{ color: t.colors.textMuted, fontWeight: '700' }}
-                  onPress={() => router.push('/settings/ai')}
-                >
-                  AI Assist is off. Enable it in Settings.
-                </Text>
-              ) : !aiKeyPresent ? (
-                <Text
-                  style={{ color: t.colors.textMuted, fontWeight: '700' }}
-                  onPress={() => router.push('/settings/ai')}
-                >
-                  Add an API key in Settings to enable generation.
-                </Text>
-              ) : null}
-            </View>
-
-            <Input
-              label="Example front"
-              value={exampleL1}
-              onChangeText={(v) => {
-                setExampleL1(v);
-                if (!exampleSource) setExampleSource('user');
-              }}
-              placeholder="Optional example shown on the front side..."
-              multiline
-              style={{ minHeight: 70, textAlignVertical: 'top' }}
-            />
-            <Input
-              label="Example back"
-              value={exampleL2}
-              onChangeText={(v) => {
-                setExampleL2(v);
-                if (!exampleSource) setExampleSource('user');
-              }}
-              placeholder="Optional example shown on the back side..."
-              multiline
-              style={{ minHeight: 70, textAlignVertical: 'top' }}
-            />
-            <Input
-              label="Note (optional)"
-              value={exampleNote}
-              onChangeText={(v) => {
-                setExampleNote(v);
-                if (!exampleSource) setExampleSource('user');
-              }}
-              placeholder="Optional pitfall / regional note..."
-              multiline
-              style={{ minHeight: 60, textAlignVertical: 'top' }}
-            />
-
-            <View style={{ height: 2 }} />
-
-            <View style={{ gap: 10 }}>
-              <Button title={saving ? 'Saving...' : 'Save'} onPress={save} disabled={!canSave} />
-              {props.mode === 'edit' && !keyboardVisible ? (
-                <Button title="Delete" variant="dangerGhost" onPress={del} />
-              ) : null}
+                    AI Assist is off. Enable it in Settings.
+                  </Text>
+                ) : !aiKeyPresent ? (
+                  <Text
+                    style={{ color: t.colors.textMuted, fontWeight: '700' }}
+                    onPress={() => router.push('/settings/ai')}
+                  >
+                    Add an API key in Settings to enable generation.
+                  </Text>
+                ) : null}
+              </View>
+            </Surface>
             </View>
 
             {card && !keyboardVisible ? (
               <View
                 style={{
                   marginTop: 10,
-                  padding: 14,
-                  borderRadius: 18,
-                  backgroundColor: t.colors.surface2,
+                  gap: 6,
                 }}
               >
                 <Text variant="label">Scheduling</Text>
-                <View style={{ height: 8 }} />
-                <View style={{ gap: 6 }}>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                    }}
-                  >
-                    <Text variant="muted">State:</Text>
-                    <Pill label={cardStateLabel(card.state)} tone={cardStateTone(card.state)} />
-                  </View>
-                  <StatRow label="Due">{formatShortDateTime(card.dueAt)}</StatRow>
-                  <StatRow label="Interval">{card.intervalDays} days</StatRow>
-                  <StatRow label="Ease">{card.ease.toFixed(2)}</StatRow>
-                  <StatRow label="Reps">{card.reps}</StatRow>
-                  <StatRow label="Lapses">{card.lapses}</StatRow>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <Text variant="muted">State:</Text>
+                  <Pill label={cardStateLabel(card.state)} tone={cardStateTone(card.state)} />
                 </View>
+                <StatRow label="Due">{formatShortDateTime(card.dueAt)}</StatRow>
+                <StatRow label="Interval">{card.intervalDays} days</StatRow>
+                <StatRow label="Ease">{card.ease.toFixed(2)}</StatRow>
+                <StatRow label="Reps">{card.reps}</StatRow>
+                <StatRow label="Lapses">{card.lapses}</StatRow>
+              </View>
+            ) : null}
+
+            {props.mode === 'edit' && !keyboardVisible ? (
+              <View style={{ marginTop: 6 }}>
+                <Button title="Delete" variant="dangerGhost" onPress={del} />
               </View>
             ) : null}
           </View>

@@ -41,6 +41,12 @@ function mergePrefs(partial: any): AppPrefs {
         p?.ai?.level === 'advanced'
           ? p.ai.level
           : DEFAULT_PREFS.ai.level,
+      reasoningEffort:
+        p?.ai?.reasoningEffort === 'low' ||
+        p?.ai?.reasoningEffort === 'medium' ||
+        p?.ai?.reasoningEffort === 'high'
+          ? p.ai.reasoningEffort
+          : DEFAULT_PREFS.ai.reasoningEffort,
     },
   };
 }

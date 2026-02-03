@@ -4,6 +4,9 @@ import type { AiExampleLevel } from '@/domain/prefs';
 type DeckPrefs = {
   secondaryLanguage?: string | null;
   exampleLevel?: AiExampleLevel | null;
+  studyReversed?: boolean;
+  showExamplesOnFront?: boolean;
+  showExamplesOnBack?: boolean;
 };
 
 function key(deckId: string): string {
@@ -32,6 +35,11 @@ export async function getDeckPrefs(deckId: string): Promise<DeckPrefs> {
       obj.exampleLevel === 'advanced'
         ? obj.exampleLevel
         : null,
+    studyReversed: typeof obj.studyReversed === 'boolean' ? obj.studyReversed : false,
+    showExamplesOnFront:
+      typeof obj.showExamplesOnFront === 'boolean' ? obj.showExamplesOnFront : true,
+    showExamplesOnBack:
+      typeof obj.showExamplesOnBack === 'boolean' ? obj.showExamplesOnBack : true,
   };
 }
 
@@ -54,11 +62,44 @@ export async function getExampleLevel(deckId: string): Promise<AiExampleLevel | 
   return prefs.exampleLevel ?? null;
 }
 
-export async function setExampleLevel(deckId: string, value: AiExampleLevel | null): Promise<void> {
+export async function getStudyReversed(deckId: string): Promise<boolean> {
+  const prefs = await getDeckPrefs(deckId);
+  return !!prefs.studyReversed;
+}
+
+export async function setStudyReversed(deckId: string, value: boolean): Promise<void> {
   const prefs = await getDeckPrefs(deckId);
   const next: DeckPrefs = {
     ...prefs,
-    exampleLevel: value ?? null,
+    studyReversed: !!value,
+  };
+  await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
+}
+
+export async function getShowExamplesOnFront(deckId: string): Promise<boolean> {
+  const prefs = await getDeckPrefs(deckId);
+  return prefs.showExamplesOnFront ?? true;
+}
+
+export async function setShowExamplesOnFront(deckId: string, value: boolean): Promise<void> {
+  const prefs = await getDeckPrefs(deckId);
+  const next: DeckPrefs = {
+    ...prefs,
+    showExamplesOnFront: !!value,
+  };
+  await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
+}
+
+export async function getShowExamplesOnBack(deckId: string): Promise<boolean> {
+  const prefs = await getDeckPrefs(deckId);
+  return prefs.showExamplesOnBack ?? true;
+}
+
+export async function setShowExamplesOnBack(deckId: string, value: boolean): Promise<void> {
+  const prefs = await getDeckPrefs(deckId);
+  const next: DeckPrefs = {
+    ...prefs,
+    showExamplesOnBack: !!value,
   };
   await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
 }
