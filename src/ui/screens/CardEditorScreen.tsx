@@ -1,11 +1,10 @@
-import { useHeaderHeight } from '@react-navigation/elements';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Picker } from '@react-native-picker/picker';
 import { Stack, router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { ActivityIndicator, Alert, Modal, Pressable, View } from 'react-native';
+import Animated, { Easing, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
 import * as deckAiRepo from '@/data/repositories/deckAiRepo';
@@ -35,9 +34,9 @@ export function CardEditorScreen(props: {
 }) {
   const t = useDecklyTheme();
   const ai = usePrefsStore((s) => s.prefs.ai);
-  const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
+  const keyboard = useAnimatedKeyboard();
   const [card, setCard] = useState<Card | null>(null);
   const [initialFront, setInitialFront] = useState('');
   const [initialBack, setInitialBack] = useState('');
@@ -87,6 +86,13 @@ export function CardEditorScreen(props: {
       transform: [{ translateX: x }],
     };
   });
+  // const keyboardPaddingStyle = useAnimatedStyle(() => ({
+  //   paddingBottom: keyboard.height.value,
+  // }), [keyboard.height]);
+
+  const keyboardAvoiderStyle = useAnimatedStyle(() => ({
+    height: withTiming(keyboard.height.value / 2, { duration: 250 })
+  }));
 
   const load = useCallback(async () => {
     if (props.mode !== 'edit' || !props.cardId) return;
@@ -410,48 +416,45 @@ export function CardEditorScreen(props: {
         }}
       />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={headerHeight}
+      <Animated.ScrollView
+        // keyboardShouldPersistTaps="handled"
+        // keyboardDismissMode="on-drag"
+        // style={{ paddingBottom: 200 }}
+        contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: t.spacing.lg + insets.bottom, }}
       >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: t.spacing.lg + insets.bottom }}
-        >
-          <View style={{ gap: 14 }}>
-            <Input
-              label="Front"
-              value={front}
-              onChangeText={setFront}
-              placeholder="Prompt"
-              right={showTranslateForFront ? renderTranslateIcon('front') : undefined}
-              editable={!isBusy}
-            />
-            <Input
-              label="Back"
-              value={back}
-              onChangeText={setBack}
-              placeholder="Answer"
-              right={showTranslateForBack ? renderTranslateIcon('back') : undefined}
-              editable={!isBusy}
-            />
-            <View style={{ gap: 8, marginTop: 6 }}>
-              <Text variant="label" style={{ color: t.colors.textMuted, opacity: 0.7 }}>
-                Optional
-              </Text>
-              <Surface
-                radius={18}
-                tone="muted"
-                border={false}
-                style={{
-                  gap: 12,
-                  paddingVertical: 16,
-                  paddingHorizontal: t.spacing.lg,
-                  marginHorizontal: -t.spacing.lg,
-                }}
-              >
+
+        <Animated.View style={[{ gap: 14 }]}>
+          <Input
+            label="Front"
+            value={front}
+            onChangeText={setFront}
+            placeholder="Prompt"
+            right={showTranslateForFront ? renderTranslateIcon('front') : undefined}
+            editable={!isBusy}
+          />
+          <Input
+            label="Back"
+            value={back}
+            onChangeText={setBack}
+            placeholder="Answer"
+            right={showTranslateForBack ? renderTranslateIcon('back') : undefined}
+            editable={!isBusy}
+          />
+          <View style={{ gap: 8, marginTop: 6 }}>
+            <Text variant="label" style={{ color: t.colors.textMuted, opacity: 0.7 }}>
+              Optional
+            </Text>
+            <Surface
+              radius={18}
+              tone="muted"
+              border={false}
+              style={{
+                gap: 12,
+                paddingVertical: 16,
+                paddingHorizontal: t.spacing.lg,
+                marginHorizontal: -t.spacing.lg,
+              }}
+            >
               <Input
                 label="Example front"
                 value={exampleL1}
@@ -460,7 +463,7 @@ export function CardEditorScreen(props: {
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Example on the front side"
-              editable={!isBusy}
+                editable={!isBusy}
                 multiline
                 style={[{ minHeight: 70, textAlignVertical: 'top' }, optionalInputStyle]}
               />
@@ -472,7 +475,7 @@ export function CardEditorScreen(props: {
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Example on the back side"
-              editable={!isBusy}
+                editable={!isBusy}
                 multiline
                 style={[{ minHeight: 70, textAlignVertical: 'top' }, optionalInputStyle]}
               />
@@ -484,7 +487,7 @@ export function CardEditorScreen(props: {
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Pitfall / regional note"
-                editable={!generating}
+                editable={!isBusy}
                 multiline
                 style={[{ minHeight: 60, textAlignVertical: 'top' }, optionalInputStyle]}
               />
@@ -558,46 +561,48 @@ export function CardEditorScreen(props: {
                 ) : null}
               </View>
             </Surface>
-            </View>
-
-            {card && !keyboardVisible ? (
+          </View>
+          {card && !keyboardVisible ? (
+            <View
+              style={{
+                marginTop: 10,
+                gap: 6,
+              }}
+            >
+              <Text variant="label">Scheduling</Text>
               <View
                 style={{
-                  marginTop: 10,
-                  gap: 6,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
                 }}
               >
-                <Text variant="label">Scheduling</Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <Text variant="muted">State:</Text>
-                  <Pill label={cardStateLabel(card.state)} tone={cardStateTone(card.state)} />
-                </View>
-                <StatRow label="Due">{formatShortDateTime(card.dueAt)}</StatRow>
-                <StatRow label="Interval">{card.intervalDays} days</StatRow>
-                <StatRow label="Ease">{card.ease.toFixed(2)}</StatRow>
-                <StatRow label="Reps">{card.reps}</StatRow>
-                <StatRow label="Lapses">{card.lapses}</StatRow>
+                <Text variant="muted">State:</Text>
+                <Pill label={cardStateLabel(card.state)} tone={cardStateTone(card.state)} />
               </View>
-            ) : null}
-
-            <View style={{ marginTop: 10 }}>
-              <Button title="Flip card" variant="secondary" onPress={reverseFields} />
+              <StatRow label="Due">{formatShortDateTime(card.dueAt)}</StatRow>
+              <StatRow label="Interval">{card.intervalDays} days</StatRow>
+              <StatRow label="Ease">{card.ease.toFixed(2)}</StatRow>
+              <StatRow label="Reps">{card.reps}</StatRow>
+              <StatRow label="Lapses">{card.lapses}</StatRow>
             </View>
+          ) : null}
 
-            {props.mode === 'edit' && !keyboardVisible ? (
-              <View style={{ marginTop: 6 }}>
-                <Button title="Delete" variant="dangerGhost" onPress={del} />
-              </View>
-            ) : null}
+          <View style={{ marginTop: 10 }}>
+            <Button title="Flip card" variant="secondary" onPress={reverseFields} />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          {props.mode === 'edit' && !keyboardVisible ? (
+            <View style={{ marginTop: 6 }}>
+              <Button title="Delete" variant="dangerGhost" onPress={del} />
+            </View>
+          ) : null}
+
+        </Animated.View>
+      </Animated.ScrollView>
+      <Animated.View style={keyboardAvoiderStyle} />
+
+      {/* <Animated.View style={keyboardAvoiderStyle} /> */}
 
       <Modal
         visible={translatePickerOpen}
@@ -652,6 +657,7 @@ export function CardEditorScreen(props: {
           </Surface>
         </View>
       </Modal>
+      {/* </KeyboardAvoidingView> */}
     </Screen>
   );
 }
