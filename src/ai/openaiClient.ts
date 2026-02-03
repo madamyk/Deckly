@@ -6,6 +6,7 @@ import {
   type ExamplePair,
   type ExamplePairBatchItem,
 } from '@/ai/examplePairs';
+import { buildTermTranslationPrompt, parseAndValidateTermTranslationJSON } from '@/ai/termTranslation';
 import {
   buildDetectDeckLanguagesPrompt,
   parseAndValidateDeckLanguagesJSON,
@@ -335,6 +336,91 @@ export async function generateExamplePairsWithOpenAi(params: {
     return {
       pairs: parsed.pairs,
       failures: parsed.failures,
+      meta: meta ?? { durationMs: 0 },
+    };
+  } catch (e: any) {
+    const msg = typeof e?.message === 'string' ? e.message : 'AI output did not pass validation.';
+    throw new OpenAiError('invalid_json', msg, undefined, {
+      model: params.prefs.model,
+      prompt,
+      responseText: content,
+      durationMs: meta?.durationMs,
+      processingMs: meta?.processingMs,
+      requestId: meta?.requestId,
+    });
+  }
+}
+
+export async function translateTermWithOpenAi(params: {
+  apiKey: string;
+  prefs: AiPrefs;
+  sourceText: string;
+  targetLanguage: string;
+  sourceLanguage?: string | null;
+  signal?: AbortSignal;
+}): Promise<{ translation: string; meta: OpenAiMeta }> {
+  if (!params.apiKey?.trim()) throw new OpenAiError('missing_key', 'OpenAI API key is missing.');
+
+  const prompt = buildTermTranslationPrompt({
+    sourceText: params.sourceText,
+    targetLanguage: params.targetLanguage,
+    sourceLanguage: params.sourceLanguage ?? null,
+  });
+
+  const system = [
+    `You are a bilingual dictionary assistant.`,
+    `Return STRICT JSON ONLY (no markdown, no code fences).`,
+    `Output keys: translation.`,
+  ].join('\n');
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: system },
+    { role: 'user', content: prompt },
+  ];
+
+  let content = '';
+  let meta: OpenAiMeta | null = null;
+  try {
+    const response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'term_translation',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['translation'],
+          properties: {
+            translation: { type: 'string' },
+          },
+        },
+      },
+    };
+
+    const result = await chatCompletion({
+      apiKey: params.apiKey,
+      model: params.prefs.model,
+      messages,
+      response_format,
+      reasoningEffort: params.prefs.reasoningEffort,
+      signal: params.signal,
+    });
+    content = result.content;
+    meta = result.meta;
+  } catch (e: any) {
+    if (e instanceof OpenAiError) {
+      throw new OpenAiError(e.code, e.message, e.status, {
+        ...(e.debug ?? {}),
+        model: params.prefs.model,
+        prompt,
+      });
+    }
+    throw e;
+  }
+
+  try {
+    return {
+      translation: parseAndValidateTermTranslationJSON(content),
       meta: meta ?? { durationMs: 0 },
     };
   } catch (e: any) {

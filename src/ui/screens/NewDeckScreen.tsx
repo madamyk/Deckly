@@ -21,9 +21,7 @@ export function NewDeckScreen() {
   const [name, setName] = useState('');
   const [accentKey, setAccentKey] = useState<string>(pickRandomDeckAccentKey());
   const [creating, setCreating] = useState(false);
-  const [createdDeckId, setCreatedDeckId] = useState<string | null>(null);
-
-  const canCreate = !creating && !createdDeckId && name.trim().length > 0;
+  const canCreate = !creating && name.trim().length > 0;
   const previewColor = resolveDeckAccentColor(accentKey) ?? t.colors.primary;
 
   async function onCreate() {
@@ -32,7 +30,7 @@ export function NewDeckScreen() {
     try {
       const deck = await createDeck(name.trim(), accentKey);
       if (!deck) return;
-      setCreatedDeckId(deck.id);
+      router.replace(`/deck/${deck.id}`);
     } catch (e: any) {
       Alert.alert('Deckly', e?.message ?? 'Failed to create deck.');
     } finally {
@@ -76,7 +74,7 @@ export function NewDeckScreen() {
                 maxLength={20}
                 returnKeyType="done"
                 onSubmitEditing={onCreate}
-                editable={!createdDeckId}
+                editable={!creating}
               />
 
               <View style={{ gap: 10 }}>
@@ -94,7 +92,7 @@ export function NewDeckScreen() {
                     flexWrap: 'wrap',
                     gap: 8,
                     paddingTop: 8,
-                    opacity: createdDeckId ? 0.6 : 1,
+                    opacity: creating ? 0.6 : 1,
                   }}
                 >
                   {DECK_ACCENTS.map((a) => {
@@ -102,7 +100,7 @@ export function NewDeckScreen() {
                     return (
                       <Pressable
                         key={a.key}
-                        disabled={!!createdDeckId}
+                        disabled={creating}
                         onPress={() => setAccentKey(a.key)}
                         style={({ pressed }) => ({
                           width: 36,
@@ -123,46 +121,18 @@ export function NewDeckScreen() {
                 </View>
               </View>
 
-              {createdDeckId ? (
-                <View style={{ gap: 10 }}>
-                  <Text variant="muted">What would you like to do next?</Text>
-                  <Button
-                    title="Add a card"
-                    onPress={() =>
-                      router.replace({
-                        pathname: '/deck/[deckId]/cards/new',
-                        params: { deckId: createdDeckId },
-                      })
-                    }
-                  />
-                  <Button
-                    title="Import CSV"
-                    variant="secondary"
-                    onPress={() =>
-                      router.replace({ pathname: '/deck/[deckId]/import', params: { deckId: createdDeckId } })
-                    }
-                  />
-                  <Button
-                    title="Open deck"
-                    variant="ghost"
-                    onPress={() => router.replace(`/deck/${createdDeckId}`)}
-                  />
-                </View>
-              ) : null}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {!createdDeckId ? (
-          <View style={{ paddingHorizontal: t.spacing.lg, paddingBottom: 10 + insets.bottom }}>
-            <Button
-              title={creating ? 'Creating...' : 'Create deck'}
-              onPress={onCreate}
-              disabled={!canCreate}
-              style={{ borderRadius: 999 }}
-            />
-          </View>
-        ) : null}
+        <View style={{ paddingHorizontal: t.spacing.lg, paddingBottom: 10 + insets.bottom }}>
+          <Button
+            title={creating ? 'Creating...' : 'Create deck'}
+            onPress={onCreate}
+            disabled={!canCreate}
+            style={{ borderRadius: 999 }}
+          />
+        </View>
       </View>
     </Screen>
   );

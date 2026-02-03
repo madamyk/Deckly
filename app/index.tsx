@@ -7,14 +7,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getDeckStats } from '@/data/repositories/decksRepo';
 import type { DeckStats } from '@/domain/models';
+import { useDecksStore } from '@/stores/decksStore';
 import { Card } from '@/ui/components/Card';
 import { EmptyState } from '@/ui/components/EmptyState';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
 import { Text } from '@/ui/components/Text';
-import { useDecksStore } from '@/stores/decksStore';
-import { useDecklyTheme } from '@/ui/theme/provider';
 import { resolveDeckAccentColor } from '@/ui/theme/deckAccents';
+import { useDecklyTheme } from '@/ui/theme/provider';
 import { nowMs } from '@/utils/time';
 
 export default function HomeScreen() {
@@ -91,7 +91,7 @@ export default function HomeScreen() {
             maxWidth: 320,
           }}
         >
-          Offline-first flashcards with spaced repetition, plus AI-generated examples and notes you
+          Offline-first language flashcards with spaced repetition, plus AI-generated examples and notes you
           can save and review later.
         </Text>
       </View>

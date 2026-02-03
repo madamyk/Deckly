@@ -7,6 +7,7 @@ import { useDecklyTheme } from '@/ui/theme/provider';
 type Props = TextInputProps & {
   label?: string;
   hint?: string;
+  right?: React.ReactNode;
   /**
    * For controlled inputs where users typically "append/edit" (e.g. deck name).
    * Moves the caret to the end on focus, without selecting the whole value.
@@ -15,7 +16,15 @@ type Props = TextInputProps & {
   placeholderLines?: number;
 };
 
-export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style, ...rest }: Props) {
+export function Input({
+  label,
+  hint,
+  right,
+  cursorAtEndOnFocus,
+  placeholderLines,
+  style,
+  ...rest
+}: Props) {
   const t = useDecklyTheme();
   const [focused, setFocused] = useState(false);
   const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(
@@ -29,6 +38,7 @@ export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style
   }, [rest]);
 
   const showPlaceholder = !valueStr && !!rest.placeholder;
+  const rightInset = right ? 36 : 0;
 
   return (
     <View style={{ gap: 6 }}>
@@ -59,6 +69,7 @@ export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style
             {
               backgroundColor: t.colors.surface2,
               color: t.colors.text,
+              paddingRight: 12 + rightInset,
             },
             style,
           ]}
@@ -71,6 +82,7 @@ export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style
               {
                 color: t.colors.textMuted,
                 opacity: focused ? 0.35 : 0.55,
+                right: 12 + rightInset,
               },
               rest.multiline && { top: 12 },
             ]}
@@ -79,6 +91,11 @@ export function Input({ label, hint, cursorAtEndOnFocus, placeholderLines, style
           >
             {rest.placeholder}
           </Text>
+        ) : null}
+        {right ? (
+          <View pointerEvents="auto" style={styles.right}>
+            {right}
+          </View>
         ) : null}
       </View>
       {hint ? <Text variant="muted">{hint}</Text> : null}
@@ -92,15 +109,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 15,
-    fontWeight: '400',
+    fontWeight: '500',
   },
   placeholder: {
     position: 'absolute',
     left: 12,
     right: 12,
     top: 12,
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 18,
     fontWeight: '400',
+  },
+  right: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

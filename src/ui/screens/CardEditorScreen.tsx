@@ -1,16 +1,20 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack, router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
+import * as deckAiRepo from '@/data/repositories/deckAiRepo';
 import { getDeck } from '@/data/repositories/decksRepo';
 import { getAiApiKey } from '@/data/secureStore';
+import { EXTRA_LANGUAGES, getLanguageOption } from '@/domain/languages';
 import type { Card, ExampleSource } from '@/domain/models';
 import { generateExamplePair } from '@/services/examplePairService';
+import { generateTermTranslation } from '@/services/termTranslationService';
 import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
@@ -54,6 +58,11 @@ export function CardEditorScreen(props: {
   const [genError, setGenError] = useState<string | null>(null);
   const [aiKeyPresent, setAiKeyPresent] = useState(false);
   const [accentColor, setAccentColor] = useState<string | null>(null);
+  const [deckLanguages, setDeckLanguages] = useState<{ front_language: string; back_language: string } | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translatePickerOpen, setTranslatePickerOpen] = useState(false);
+  const [translateTargetCode, setTranslateTargetCode] = useState(EXTRA_LANGUAGES[0]?.code ?? 'en');
+  const [pendingTranslateSide, setPendingTranslateSide] = useState<'front' | 'back' | null>(null);
   const progressTrackW = useSharedValue(0);
   const progressT = useSharedValue(0);
 
@@ -112,6 +121,8 @@ export function CardEditorScreen(props: {
     (async () => {
       const d = await getDeck(props.deckId);
       setAccentColor(resolveDeckAccentColor(d?.accentColor) ?? null);
+      const langs = await deckAiRepo.getDeckLanguages(props.deckId);
+      setDeckLanguages(langs);
     })();
   }, [props.deckId]);
 
@@ -137,6 +148,12 @@ export function CardEditorScreen(props: {
   const canGenerate = front.trim().length > 0 && back.trim().length > 0;
   const optionalInputStyle = { backgroundColor: t.colors.surface };
   const accentProgress = accentColor ?? t.colors.primary2;
+  const isBusy = generating || translating;
+  const frontEmpty = front.trim().length === 0;
+  const backEmpty = back.trim().length === 0;
+  const showTranslateForFront = back.trim().length > 0 && frontEmpty;
+  const showTranslateForBack = front.trim().length > 0 && backEmpty;
+  const canTranslate = ai.enabled && aiKeyPresent && !isBusy;
 
   async function save() {
     const f = front.trim();
@@ -238,6 +255,92 @@ export function CardEditorScreen(props: {
     generateConfirmed();
   }
 
+  function formatLangLabel(lang: string): string {
+    const opt = getLanguageOption(lang);
+    return opt ? `${opt.label} (${opt.code})` : lang;
+  }
+
+  async function runTranslate(params: {
+    side: 'front' | 'back';
+    targetLanguage: string;
+    sourceLanguage?: string | null;
+  }) {
+    const sourceText = params.side === 'front' ? back.trim() : front.trim();
+    if (!sourceText) return;
+    setTranslating(true);
+    try {
+      const result = await generateTermTranslation({
+        sourceText,
+        targetLanguage: params.targetLanguage,
+        sourceLanguage: params.sourceLanguage ?? null,
+      });
+      if (params.side === 'front') setFront(result.translation);
+      else setBack(result.translation);
+    } catch (e: any) {
+      Alert.alert('Deckly', e?.message ?? 'Translation failed.');
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  function confirmTranslate(params: {
+    side: 'front' | 'back';
+    targetLanguage: string;
+    sourceLanguage?: string | null;
+  }) {
+    const missingLabel = params.side === 'front' ? 'front' : 'back';
+    const targetLabel = formatLangLabel(params.targetLanguage);
+    Alert.alert(
+      'Auto-translate?',
+      `We'll translate the other side into ${targetLabel} and fill the ${missingLabel}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Translate', onPress: () => runTranslate(params) },
+      ],
+    );
+  }
+
+  function handleTranslate(side: 'front' | 'back') {
+    if (!canTranslate) return;
+    const sourceText = side === 'front' ? back.trim() : front.trim();
+    if (!sourceText) return;
+    if (deckLanguages?.front_language && deckLanguages?.back_language) {
+      const targetLanguage =
+        side === 'front' ? deckLanguages.front_language : deckLanguages.back_language;
+      const sourceLanguage =
+        side === 'front' ? deckLanguages.back_language : deckLanguages.front_language;
+      confirmTranslate({ side, targetLanguage, sourceLanguage });
+      return;
+    }
+    setPendingTranslateSide(side);
+    setTranslatePickerOpen(true);
+  }
+
+  const renderTranslateIcon = (side: 'front' | 'back') =>
+    translating ? (
+      <ActivityIndicator size="small" color={accentProgress} />
+    ) : (
+      <Pressable
+        onPress={() => handleTranslate(side)}
+        disabled={!canTranslate}
+        hitSlop={8}
+        style={({ pressed }) => ({
+          opacity: !canTranslate ? 0.35 : pressed ? 0.6 : 1,
+        })}
+      >
+        <Ionicons
+          name="sparkles-outline"
+          size={18}
+          color={canTranslate ? t.colors.text : t.colors.textMuted}
+        />
+      </Pressable>
+    );
+
+  function closeTranslatePicker() {
+    setTranslatePickerOpen(false);
+    setPendingTranslateSide(null);
+  }
+
   async function del() {
     if (!props.cardId) return;
     Alert.alert('Delete card?', 'This will remove the card from the deck.', [
@@ -253,12 +356,41 @@ export function CardEditorScreen(props: {
     ]);
   }
 
+  function reverseFields() {
+    setFront(back);
+    setBack(front);
+    setExampleL1(exampleL2);
+    setExampleL2(exampleL1);
+  }
+
   return (
     // With a native Stack header, avoid top safe-area padding (it creates a "blank band" below the header).
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen
         options={{
           title: props.mode === 'create' ? 'New Card' : 'Edit Card',
+          headerLeft: () => (
+            <Pressable
+              onPress={() => {
+                if (!isDirty) {
+                  router.back();
+                  return;
+                }
+                Alert.alert('Discard changes?', 'You have unsaved changes.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+                ]);
+              }}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <Ionicons name="chevron-back" size={22} color={t.colors.text} />
+            </Pressable>
+          ),
           headerRight: () => (
             <Pressable
               onPress={save}
@@ -294,14 +426,16 @@ export function CardEditorScreen(props: {
               value={front}
               onChangeText={setFront}
               placeholder="Prompt"
-              editable={!generating}
+              right={showTranslateForFront ? renderTranslateIcon('front') : undefined}
+              editable={!isBusy}
             />
             <Input
               label="Back"
               value={back}
               onChangeText={setBack}
               placeholder="Answer"
-              editable={!generating}
+              right={showTranslateForBack ? renderTranslateIcon('back') : undefined}
+              editable={!isBusy}
             />
             <View style={{ gap: 8, marginTop: 6 }}>
               <Text variant="label" style={{ color: t.colors.textMuted, opacity: 0.7 }}>
@@ -326,7 +460,7 @@ export function CardEditorScreen(props: {
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Example on the front side"
-                editable={!generating}
+              editable={!isBusy}
                 multiline
                 style={[{ minHeight: 70, textAlignVertical: 'top' }, optionalInputStyle]}
               />
@@ -338,7 +472,7 @@ export function CardEditorScreen(props: {
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Example on the back side"
-                editable={!generating}
+              editable={!isBusy}
                 multiline
                 style={[{ minHeight: 70, textAlignVertical: 'top' }, optionalInputStyle]}
               />
@@ -390,7 +524,7 @@ export function CardEditorScreen(props: {
                     variant="secondary"
                     left={<Ionicons name="sparkles-outline" size={18} color={t.colors.text} />}
                     onPress={generate}
-                    disabled={!ai.enabled || !aiKeyPresent || !canGenerate}
+                    disabled={!ai.enabled || !aiKeyPresent || !canGenerate || isBusy}
                   />
                 )}
                 {genError ? (
@@ -452,6 +586,10 @@ export function CardEditorScreen(props: {
               </View>
             ) : null}
 
+            <View style={{ marginTop: 10 }}>
+              <Button title="Flip card" variant="secondary" onPress={reverseFields} />
+            </View>
+
             {props.mode === 'edit' && !keyboardVisible ? (
               <View style={{ marginTop: 6 }}>
                 <Button title="Delete" variant="dangerGhost" onPress={del} />
@@ -460,6 +598,60 @@ export function CardEditorScreen(props: {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={translatePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeTranslatePicker}
+      >
+        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
+          <Pressable
+            onPress={closeTranslatePicker}
+            style={{
+              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
+              backgroundColor: 'rgba(0,0,0,0.55)',
+            }}
+          />
+          <Surface radius={22} style={{ gap: 12, padding: 16 }}>
+            <Text variant="h2">Translate into</Text>
+            <Text variant="muted">
+              {pendingTranslateSide
+                ? `We'll translate the ${pendingTranslateSide === 'front' ? 'back' : 'front'} into the selected language and fill the ${pendingTranslateSide}.`
+                : `We'll translate the other side into the selected language and fill the empty field.`}
+            </Text>
+            <Picker
+              selectedValue={translateTargetCode}
+              onValueChange={(v) => setTranslateTargetCode(String(v))}
+            >
+              {EXTRA_LANGUAGES.map((lang) => (
+                <Picker.Item
+                  key={lang.code}
+                  label={`${lang.emoji} ${lang.label}`}
+                  value={lang.code}
+                />
+              ))}
+            </Picker>
+            <View style={{ gap: 10 }}>
+              <Button
+                title="Translate"
+                onPress={() => {
+                  if (!pendingTranslateSide) {
+                    closeTranslatePicker();
+                    return;
+                  }
+                  const opt = getLanguageOption(translateTargetCode);
+                  const targetLanguage = opt ? `${opt.label} (${opt.code})` : translateTargetCode;
+                  closeTranslatePicker();
+                  runTranslate({ side: pendingTranslateSide, targetLanguage, sourceLanguage: null });
+                }}
+                disabled={!pendingTranslateSide}
+              />
+              <Button title="Cancel" variant="secondary" onPress={closeTranslatePicker} />
+            </View>
+          </Surface>
+        </View>
+      </Modal>
     </Screen>
   );
 }
