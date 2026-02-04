@@ -25,7 +25,7 @@ export function Input({
   style,
   ...rest
 }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const [focused, setFocused] = useState(false);
   const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(
     undefined,
@@ -48,7 +48,7 @@ export function Input({
           {...rest}
           // We render our own placeholder so it can be visually lighter.
           placeholder={undefined}
-          placeholderTextColor={t.colors.textMuted}
+          placeholderTextColor={theme.colors.textMuted}
           selection={rest.selection ?? forcedSelection}
           onFocus={(e) => {
             setFocused(true);
@@ -67,8 +67,8 @@ export function Input({
           style={[
             styles.input,
             {
-              backgroundColor: t.colors.surface2,
-              color: t.colors.text,
+              backgroundColor: theme.colors.surface2,
+              color: theme.colors.text,
               paddingRight: 12 + rightInset,
             },
             style,
@@ -80,7 +80,7 @@ export function Input({
             style={[
               styles.placeholder,
               {
-                color: t.colors.textMuted,
+                color: theme.colors.textMuted,
                 opacity: focused ? 0.35 : 0.55,
                 right: 12 + rightInset,
               },

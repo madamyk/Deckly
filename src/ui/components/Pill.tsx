@@ -12,16 +12,16 @@ export function Pill(
     tone?: PillTone;
   },
 ) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const tone = props.tone ?? 'neutral';
   const colors = useMemo(() => {
-    if (tone === 'primary') return { bg: t.colors.primary, fg: '#FFFFFF' };
-    if (tone === 'teal') return { bg: t.colors.primary2, fg: t.scheme === 'dark' ? '#05211C' : '#FFFFFF' };
-    if (tone === 'amber') return { bg: t.colors.warning, fg: t.scheme === 'dark' ? '#241500' : '#FFFFFF' };
-    if (tone === 'subtleAmber') return { bg: t.colors.surface2, fg: t.colors.warning };
-    if (tone === 'danger') return { bg: t.colors.danger, fg: '#FFFFFF' };
-    return { bg: t.colors.surface2, fg: t.colors.text };
-  }, [t, tone]);
+    if (tone === 'primary') return { bg: theme.colors.primary, fg: '#FFFFFF' };
+    if (tone === 'teal') return { bg: theme.colors.primary2, fg: theme.scheme === 'dark' ? '#05211C' : '#FFFFFF' };
+    if (tone === 'amber') return { bg: theme.colors.warning, fg: theme.scheme === 'dark' ? '#241500' : '#FFFFFF' };
+    if (tone === 'subtleAmber') return { bg: theme.colors.surface2, fg: theme.colors.warning };
+    if (tone === 'danger') return { bg: theme.colors.danger, fg: '#FFFFFF' };
+    return { bg: theme.colors.surface2, fg: theme.colors.text };
+  }, [theme, tone]);
 
   return (
     <View
@@ -30,7 +30,7 @@ export function Pill(
         styles.base,
         {
           backgroundColor: colors.bg,
-          borderColor: tone === 'subtleAmber' ? 'rgba(217,119,6,0.35)' : t.colors.border,
+          borderColor: tone === 'subtleAmber' ? 'rgba(217,119,6,0.35)' : theme.colors.border,
         },
         props.style,
       ]}

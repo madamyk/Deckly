@@ -4,16 +4,16 @@ import { StyleSheet, View, type ViewProps } from 'react-native';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export function Card(props: ViewProps) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   return (
     <View
       {...props}
       style={[
         styles.base,
         {
-          backgroundColor: t.colors.surface,
-          borderColor: t.colors.border,
-          shadowColor: t.colors.shadow,
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          shadowColor: theme.colors.shadow,
         },
         props.style,
       ]}

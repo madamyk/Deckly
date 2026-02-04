@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Papa from 'papaparse';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigation } from '@react-navigation/native';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -13,18 +13,27 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Switch,
   View,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
 import { getExampleLevel } from '@/data/repositories/deckPrefsRepo';
 import { getAiApiKey } from '@/data/secureStore';
-import { makeId } from '@/utils/id';
-import { generateAndPersistExamplePairs } from '@/services/examplePairService';
+import type { ExampleSource } from '@/domain/models';
 import { ensureDeckLanguages } from '@/services/deckLanguageService';
+import { generateExamplePairsInMemory } from '@/services/examplePairService';
 import { useImportResultStore } from '@/stores/importResultStore';
+import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { InfoModal } from '@/ui/components/InfoModal';
 import { Row } from '@/ui/components/Row';
@@ -32,7 +41,7 @@ import { Screen } from '@/ui/components/Screen';
 import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
 import { useDecklyTheme } from '@/ui/theme/provider';
-import { usePrefsStore } from '@/stores/prefsStore';
+import { makeId } from '@/utils/id';
 
 type ParsedCsv = {
   fileName: string;
@@ -53,7 +62,8 @@ function normalizeHeaderCell(v: string): string {
 }
 
 export default function ImportCsvScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const navigation = useNavigation();
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const { prefs } = usePrefsStore();
@@ -78,11 +88,13 @@ export default function ImportCsvScreen() {
   const [genProgress, setGenProgress] = useState<{ done: number; total: number; failed: number } | null>(
     null,
   );
+  const [hasBatchResponse, setHasBatchResponse] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRequestedRef = useRef(false);
   const allowNavRef = useRef(false);
   const progressFrac = useSharedValue(0);
   const progressBarWidth = useSharedValue(0);
+  const indeterminate = useSharedValue(0);
 
   useEffect(() => {
     const frac = genProgress?.total ? genProgress.done / genProgress.total : 0;
@@ -95,13 +107,39 @@ export default function ImportCsvScreen() {
     };
   });
 
+  const indeterminateFillStyle = useAnimatedStyle(() => {
+    const barWidth = Math.max(40, progressBarWidth.value * 0.35);
+    const travel = Math.max(0, progressBarWidth.value - barWidth);
+    return {
+      width: barWidth,
+      transform: [{ translateX: indeterminate.value * travel }],
+    };
+  });
+
+  const showIndeterminate = !!genProgress && !hasBatchResponse;
+  const animateIndeterminate = !!genProgress;
+
+  useEffect(() => {
+    cancelAnimation(indeterminate);
+    if (animateIndeterminate) {
+      indeterminate.value = 0;
+      indeterminate.value = withRepeat(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    } else {
+      indeterminate.value = 0;
+    }
+  }, [animateIndeterminate, indeterminate]);
+
   const rows = useMemo(() => parsed?.rows ?? [], [parsed]);
   const headerRow = useMemo(() => (hasHeader ? rows[0] ?? [] : []), [hasHeader, rows]);
   const dataRows = useMemo(() => (hasHeader ? rows.slice(1) : rows), [hasHeader, rows]);
 
   const columnCount = useMemo(() => {
     let max = 0;
-    for (const r of rows.slice(0, 50)) max = Math.max(max, r.length);
+    for (const row of rows.slice(0, 50)) max = Math.max(max, row.length);
     return max;
   }, [rows]);
 
@@ -129,12 +167,11 @@ export default function ImportCsvScreen() {
     };
   }, []);
 
-  async function rollbackImport(createdIds: string[]) {
-    if (!createdIds.length) return;
-    await Promise.all(createdIds.map((id) => cardsRepo.softDeleteCard(id)));
-  }
-
   const confirmCancelImport = React.useCallback(() => {
+    if (importPhase === 'writing_cards') {
+      Alert.alert('Finishing import', 'Please wait a moment.');
+      return;
+    }
     Alert.alert(
       'Cancel import?',
       'Leaving now will stop the import and discard any remaining progress.',
@@ -158,7 +195,7 @@ export default function ImportCsvScreen() {
         },
       ],
     );
-  }, [importPhase, router, deckId]);
+  }, [importPhase, deckId]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
@@ -245,9 +282,9 @@ export default function ImportCsvScreen() {
       const header = (parsedRows[0] ?? []).map(normalizeHeaderCell);
       const find = (names: string[]) => header.findIndex((h) => names.includes(h));
 
-      const f = find(['front', 'question', 'q', 'prompt', 'term']);
-      const b = find(['back', 'answer', 'a', 'definition', 'meaning']);
-      const exFront = find([
+      const frontIndex = find(['front', 'question', 'q', 'prompt', 'term']);
+      const backIndex = find(['back', 'answer', 'a', 'definition', 'meaning']);
+      const exampleFrontIndex = find([
         'example_front',
         'example front',
         'example_front (front)',
@@ -256,7 +293,7 @@ export default function ImportCsvScreen() {
         'l1_example',
         'example',
       ]);
-      const exBack = find([
+      const exampleBackIndex = find([
         'example_back',
         'example back',
         'example_back (back)',
@@ -265,10 +302,10 @@ export default function ImportCsvScreen() {
         'l2_example',
       ]);
 
-      if (f >= 0) setFrontCol(f);
-      if (b >= 0) setBackCol(b);
-      if (exFront >= 0) setExampleL1Col(exFront);
-      if (exBack >= 0) setExampleL2Col(exBack);
+      if (frontIndex >= 0) setFrontCol(frontIndex);
+      if (backIndex >= 0) setBackCol(backIndex);
+      if (exampleFrontIndex >= 0) setExampleL1Col(exampleFrontIndex);
+      if (exampleBackIndex >= 0) setExampleL2Col(exampleBackIndex);
     }
   }
 
@@ -309,7 +346,7 @@ export default function ImportCsvScreen() {
     allowNavRef.current = false;
 
     setImporting(true);
-    setImportPhase('writing_cards');
+    setImportPhase(null);
     setGenProgress(null);
     try {
       const existing = dedupe ? await cardsRepo.getCardKeySet(deckId) : new Set<string>();
@@ -323,7 +360,8 @@ export default function ImportCsvScreen() {
         back: string;
         exampleL1?: string | null;
         exampleL2?: string | null;
-        exampleSource?: 'user' | null;
+        exampleNote?: string | null;
+        exampleSource?: ExampleSource | null;
         exampleGeneratedAt?: number | null;
       }[] = [];
 
@@ -356,16 +394,10 @@ export default function ImportCsvScreen() {
           back,
           exampleL1,
           exampleL2,
+          exampleNote: null,
           exampleSource: exampleL1 || exampleL2 ? 'user' : null,
           exampleGeneratedAt: null,
         });
-      }
-
-      const { created, createdIds } = await cardsRepo.createManyCards({ deckId, items });
-
-      if (cancelRequestedRef.current) {
-        await rollbackImport(createdIds);
-        return;
       }
 
       let examplesTotal = 0;
@@ -373,8 +405,9 @@ export default function ImportCsvScreen() {
       let examplesFailed = 0;
       let examplesCancelled = 0;
       let failureSummary = '';
+      let finalItems = items;
 
-      if (generateExamples && created > 0 && !cancelRequestedRef.current) {
+      if (generateExamples && items.length > 0 && !cancelRequestedRef.current) {
         setImportPhase('detecting_languages');
         const controller = new AbortController();
         abortRef.current = controller;
@@ -393,6 +426,8 @@ export default function ImportCsvScreen() {
         });
 
         setImportPhase('generating_examples');
+        setHasBatchResponse(false);
+        progressFrac.value = 0;
         const cardsForGen = items.map((it) => ({
           id: it.id,
           front: it.front,
@@ -407,7 +442,7 @@ export default function ImportCsvScreen() {
 
         try {
           const levelOverride = await getExampleLevel(deckId);
-          const res = await generateAndPersistExamplePairs({
+          const res = await generateExamplePairsInMemory({
             deckId,
             cards: cardsForGen,
             mode,
@@ -415,14 +450,20 @@ export default function ImportCsvScreen() {
             batchSize: 10,
             levelOverride: levelOverride ?? undefined,
             signal: controller.signal,
+            onFirstBatchResponse: () => setHasBatchResponse(true),
             onProgress: (p) => setGenProgress(p),
           });
           examplesDone = res.done;
           examplesFailed = res.failed.length;
           if (controller.signal.aborted) examplesCancelled = 1;
           if (res.failed.length) {
-            failureSummary = res.failed.slice(0, 5).map((f) => f.reason).join(' | ');
+            failureSummary = res.failed.slice(0, 5).map((failure) => failure.reason).join(' | ');
           }
+          finalItems = items.map((item) => {
+            const patch = res.patches[item.id];
+            if (!patch) return item;
+            return { ...item, ...patch };
+          });
         } catch (e: any) {
           if (controller.signal.aborted) {
             examplesCancelled = 1;
@@ -435,9 +476,13 @@ export default function ImportCsvScreen() {
       }
 
       if (cancelRequestedRef.current) {
-        await rollbackImport(createdIds);
         return;
       }
+
+      if (cancelRequestedRef.current) return;
+      setImportPhase('writing_cards');
+      if (cancelRequestedRef.current) return;
+      const { created } = await cardsRepo.createManyCards({ deckId, items: finalItems });
 
       // Go back to the deck and show a success notification there.
       useImportResultStore.getState().setResult({
@@ -526,98 +571,84 @@ export default function ImportCsvScreen() {
                   router.back();
                 }
               }}
-              style={({ pressed }) => ({
-                paddingHorizontal: 8,
-                paddingVertical: 6,
-                opacity: pressed ? 0.6 : 1,
-              })}
+              style={({ pressed }) => [styles.headerBackButton, { opacity: pressed ? 0.6 : 1 }]}
             >
-              <Ionicons name="chevron-back" size={22} color={t.colors.text} />
+              <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
             </Pressable>
           ),
         }}
       />
       {!parsed ? (
-        <View style={{ flex: 1, padding: t.spacing.lg, justifyContent: 'center' }}>
-          <View style={{ gap: 12, alignItems: 'center' }}>
-            <Text variant="h2" style={{ textAlign: 'center' }}>
+        <View style={styles.emptyState}>
+          <View style={styles.emptyContent}>
+            <Text variant="h2" style={styles.centerText}>
               CSV Import
             </Text>
-            <Text variant="muted" style={{ textAlign: 'center' }}>
+            <Text variant="muted" style={styles.centerText}>
               Pick a CSV file, map columns, then import. Quoted fields and commas are supported.
             </Text>
-            <View style={{ height: 6 }} />
+            <View style={styles.spacer6} />
             <Button
               title="Pick CSV file"
               variant="secondary"
               onPress={pickCsv}
-              style={{ alignSelf: 'stretch' }}
+              style={styles.stretchButton}
             />
           </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: t.spacing.lg, paddingTop: 12, paddingBottom: 36 }}>
-          <View style={{ gap: 10 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.section}>
             <Text variant="h2">Selected file</Text>
             <View
-              style={{
-                padding: 14,
-                borderRadius: 18,
-                backgroundColor: t.colors.surface,
-                borderWidth: 1,
-                borderColor: t.colors.border,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
+              style={styles.selectedCard}
             >
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={{ fontWeight: '900' }}>
+              <View style={styles.flex1}>
+                <Text numberOfLines={1} style={styles.fileName}>
                   {parsed.fileName}
                 </Text>
                 <Text variant="muted">{rows.length} rows</Text>
               </View>
-	              <Button title="Change" variant="ghost" onPress={pickCsv} />
-	            </View>
-	          </View>
-	          <>
-	            <View style={{ height: 18 }} />
-	            <View style={{ gap: 12 }}>
-	              <Text variant="h2">Mapping</Text>
+              <Button title="Change" variant="ghost" onPress={pickCsv} />
+            </View>
+          </View>
+          <>
+            <View style={styles.spacer18} />
+            <View style={styles.mappingSection}>
+              <Text variant="h2">Mapping</Text>
 
               <Row>
                 <Text variant="label">First row is header</Text>
                 <Switch
                   value={hasHeader}
                   onValueChange={(next) => setHasHeader(next)}
-                  trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                  trackColor={{ false: theme.colors.surface2, true: theme.colors.primaryGradientEnd }}
                   thumbColor={hasHeader ? '#FFFFFF' : '#F4F5F7'}
-                  ios_backgroundColor={t.colors.surface2}
+                  ios_backgroundColor={theme.colors.surface2}
                 />
               </Row>
 
               <Row>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <View style={styles.rowLabelGroup}>
                   <Text variant="label">Deduplicate (front+back)</Text>
                   <Pressable
                     onPress={() => setDedupeInfoOpen(true)}
                     hitSlop={10}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                    style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.7 : 1 }]}
                   >
-                    <Ionicons name="information-circle-outline" size={18} color={t.colors.textMuted} />
+                    <Ionicons name="information-circle-outline" size={18} color={theme.colors.textMuted} />
                   </Pressable>
                 </View>
                 <Switch
                   value={dedupe}
                   onValueChange={(next) => setDedupe(next)}
-                  trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                  trackColor={{ false: theme.colors.surface2, true: theme.colors.primaryGradientEnd }}
                   thumbColor={dedupe ? '#FFFFFF' : '#F4F5F7'}
-                  ios_backgroundColor={t.colors.surface2}
+                  ios_backgroundColor={theme.colors.surface2}
                 />
               </Row>
 
-              <View style={{ gap: 10 }}>
+              <View style={styles.fieldGroup}>
                 <ColumnSelect
                   label="Front"
                   value={frontCol}
@@ -626,7 +657,7 @@ export default function ImportCsvScreen() {
                 />
               </View>
 
-              <View style={{ gap: 10 }}>
+              <View style={styles.fieldGroup}>
                 <ColumnSelect
                   label="Back"
                   value={backCol}
@@ -635,7 +666,7 @@ export default function ImportCsvScreen() {
                 />
               </View>
 
-              <View style={{ gap: 10 }}>
+              <View style={styles.fieldGroup}>
                 <ColumnSelect
                   label="Example front"
                   value={exampleL1Col}
@@ -644,7 +675,7 @@ export default function ImportCsvScreen() {
                 />
               </View>
 
-              <View style={{ gap: 10 }}>
+              <View style={styles.fieldGroup}>
                 <ColumnSelect
                   label="Example back"
                   value={exampleL2Col}
@@ -653,36 +684,36 @@ export default function ImportCsvScreen() {
                 />
               </View>
 
-              <View style={{ height: 4 }} />
+              <View style={styles.spacer4} />
 
-              <View style={{ height: 8 }} />
+              <View style={styles.spacer8} />
 
               {importing && importPhase === 'detecting_languages' ? (
-                <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <ActivityIndicator color={t.colors.textMuted} />
+                <View style={styles.detectingRow}>
+                  <ActivityIndicator color={theme.colors.textMuted} />
                   <Text variant="muted">Detecting languages…</Text>
                 </View>
               ) : null}
 
               {!prefs.ai.enabled ? (
-                <View style={{ gap: 10 }}>
+                <View style={styles.aiSection}>
                   <Row>
                     <Text variant="label">Use AI Assist</Text>
                     <Switch
                       value={false}
                       disabled
-                      trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                      trackColor={{ false: theme.colors.surface2, true: theme.colors.primaryGradientEnd }}
                       thumbColor="#F4F5F7"
-                      ios_backgroundColor={t.colors.surface2}
+                      ios_backgroundColor={theme.colors.surface2}
                     />
                   </Row>
-                  <Text variant="muted" style={{ fontSize: 12 }}>
+                  <Text variant="muted" style={styles.aiHint}>
                     Generates bilingual example pairs and short notes using your OpenAI key based on Front/Back text.
                   </Text>
-                  <Text variant="muted" style={{ fontSize: 12 }}>
+                  <Text variant="muted" style={styles.aiHint}>
                     Enable AI Assist in Settings — tap{' '}
                     <Text
-                      style={{ textDecorationLine: 'underline', color: t.colors.primary, fontSize: 12 }}
+                      style={styles.aiHintLink}
                       onPress={() => router.push('/settings/ai')}
                     >
                       here
@@ -697,7 +728,7 @@ export default function ImportCsvScreen() {
                   onPress={() => router.push('/settings/ai')}
                 />
               ) : (
-                <View style={{ gap: 10 }}>
+                <View style={styles.aiSection}>
                   <Row>
                     <Text variant="label">Use AI Assist</Text>
                     <Switch
@@ -706,71 +737,60 @@ export default function ImportCsvScreen() {
                         setAiTogglesTouched(true);
                         setGenerateExamples(next);
                       }}
-                      trackColor={{ false: t.colors.surface2, true: t.colors.primaryGradientEnd }}
+                      trackColor={{ false: theme.colors.surface2, true: theme.colors.primaryGradientEnd }}
                       thumbColor={generateExamples ? '#FFFFFF' : '#F4F5F7'}
-                      ios_backgroundColor={t.colors.surface2}
+                      ios_backgroundColor={theme.colors.surface2}
                     />
                   </Row>
-                  <Text variant="muted" style={{ fontSize: 12 }}>
+                  <Text variant="muted" style={styles.aiHint}>
                     Generates bilingual example pairs and short notes using your OpenAI key based on Front/Back text.
                   </Text>
                 </View>
               )}
 
               {genProgress ? (
-                <Surface radius={16} border={false} padding={12} style={{ marginTop: 6 }}>
+                <Surface radius={16} border={false} padding={12} style={styles.progressCard}>
                   <Text variant="muted">
-                    Generating examples: {genProgress.done}/{genProgress.total}
+                    {showIndeterminate
+                      ? 'Generating examples…'
+                      : `Generating examples: ${genProgress.done}/${genProgress.total}`}
                   </Text>
-                  <View style={{ height: 10 }} />
-                  <View
-                    style={{
-                      borderRadius: 999,
-                      backgroundColor: t.colors.border,
-                      padding: 1,
-                    }}
-                  >
+                  <View style={styles.spacer10} />
+                  <View style={styles.progressTrack}>
                     <View
-                      style={{
-                        height: 8,
-                        borderRadius: 999,
-                        backgroundColor: t.colors.surface2,
-                        overflow: 'hidden',
-                      }}
+                      style={styles.progressTrackInner}
                       onLayout={(e) => {
                         progressBarWidth.value = e.nativeEvent.layout.width;
                       }}
                     >
                       <Animated.View
                         style={[
-                          {
-                            height: '100%',
-                            borderRadius: 999,
-                            backgroundColor: t.colors.primary2,
-                          },
-                          progressFillStyle,
+                          styles.indeterminateFill,
+                          indeterminateFillStyle,
+                          { opacity: showIndeterminate ? 1 : 0 },
                         ]}
                       />
+                      <Animated.View style={[styles.progressFill, progressFillStyle]} />
                     </View>
                   </View>
                   {genProgress.failed ? (
                     <>
-                      <View style={{ height: 10 }} />
-                      <Text variant="muted" style={{ color: t.colors.danger }}>
+                      <View style={styles.spacer10} />
+                      <Text variant="muted" style={styles.failedText}>
                         Failed: {genProgress.failed}
                       </Text>
                     </>
                   ) : null}
-                  <View style={{ height: 10 }} />
+                  <View style={styles.spacer10} />
                   <Button
                     title="Cancel generation"
                     variant="dangerGhost"
-                    onPress={() => abortRef.current?.abort()}
+                    onPress={confirmCancelImport}
                   />
                 </Surface>
               ) : null}
 
-              <View style={{ height: 8 }} />
+              <View style={styles.spacer8} />
               <Button
                 title={importing ? 'Importing...' : 'Import into deck'}
                 onPress={doImport}
@@ -778,95 +798,73 @@ export default function ImportCsvScreen() {
               />
             </View>
 
-            <View style={{ height: 22 }} />
-            <View style={{ gap: 10 }}>
+            <View style={styles.spacer22} />
+            <View style={styles.section}>
               <Text variant="h2">Preview</Text>
               {previewRows.length === 0 ? (
                 <Text variant="muted">No rows to preview (check header toggle).</Text>
               ) : mappedPreview.length === 0 ? (
                 <Text variant="muted">Select column mapping to preview.</Text>
               ) : (
-                <Surface radius={18} style={{ overflow: 'hidden' }}>
-                  {mappedPreview.map((r, idx) => (
-                    <View key={idx} style={{ padding: 14 }}>
+                <Surface radius={18} style={styles.previewSurface}>
+                  {mappedPreview.map((row, idx) => (
+                    <View key={idx} style={styles.previewItem}>
                       {idx > 0 ? (
-                        <View style={{ height: 1, backgroundColor: t.colors.border, marginBottom: 14 }} />
+                        <View style={styles.previewDivider} />
                       ) : null}
-                      <View style={{ gap: 12 }}>
-                        <View style={{ flexDirection: 'row', gap: 14 }}>
-                          <View style={{ flex: 1, gap: 6 }}>
-                            <Text variant="label" style={{ color: t.colors.textMuted }}>
+                      <View style={styles.previewContent}>
+                        <View style={styles.previewRow}>
+                          <View style={styles.previewCol}>
+                            <Text variant="label" style={styles.previewLabel}>
                               Front
                             </Text>
-                            <Text style={{ fontSize: 18, fontWeight: '900' }} numberOfLines={3}>
-                              {r.front || '—'}
+                            <Text style={styles.previewValue} numberOfLines={3}>
+                              {row.front || '—'}
                             </Text>
                           </View>
-                          <View style={{ flex: 1, gap: 6 }}>
-                            <Text variant="label" style={{ color: t.colors.textMuted }}>
+                          <View style={styles.previewCol}>
+                            <Text variant="label" style={styles.previewLabel}>
                               Back
                             </Text>
-                            <Text style={{ fontSize: 18, fontWeight: '900' }} numberOfLines={3}>
-                              {r.back || '—'}
+                            <Text style={styles.previewValue} numberOfLines={3}>
+                              {row.back || '—'}
                             </Text>
                           </View>
                         </View>
-                        {r.exampleFront || r.exampleBack || r.willGenerateFront || r.willGenerateBack ? (
-                          <View style={{ gap: 6 }}>
-                            <View style={{ paddingTop: 2 }}>
-                              <Text
-                                style={{
-                                  fontSize: 13,
-                                  lineHeight: 18,
-                                  fontWeight: '800',
-                                  color: t.colors.text,
-                                  opacity: 0.8,
-                                }}
-                              >
+                        {row.exampleFront || row.exampleBack || row.willGenerateFront || row.willGenerateBack ? (
+                          <View style={styles.examplesBlock}>
+                            <View style={styles.examplesHeader}>
+                              <Text style={styles.examplesTitle}>
                                 Examples
                               </Text>
                             </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-                              <Text variant="label" style={{ color: t.colors.textMuted, width: 62 }}>
+                            <View style={styles.examplesRow}>
+                              <Text variant="label" style={styles.examplesLabel}>
                                 Front
                               </Text>
                               <Text
-                                style={{
-                                  flex: 1,
-                                  fontSize: 13,
-                                  lineHeight: 18,
-                                  fontWeight: '500',
-                                  color: t.colors.textMuted,
-                                  opacity: 0.9,
-                                }}
+                                style={styles.examplesValue}
                                 numberOfLines={2}
                               >
-                                {r.willGenerateFront
+                                {row.willGenerateFront
                                   ? 'AI will generate on import'
-                                  : r.exampleFront
-                                    ? r.exampleFront
+                                  : row.exampleFront
+                                    ? row.exampleFront
                                     : '—'}
                               </Text>
                             </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-                              <Text variant="label" style={{ color: t.colors.textMuted, width: 62 }}>
+                            <View style={styles.examplesRow}>
+                              <Text variant="label" style={styles.examplesLabel}>
                                 Back
                               </Text>
                               <Text
-                                style={{
-                                  flex: 1,
-                                  fontSize: 13,
-                                  lineHeight: 18,
-                                  fontWeight: '500',
-                                  color: t.colors.textMuted,
-                                  opacity: 0.9,
-                                }}
+                                style={styles.examplesValue}
                                 numberOfLines={2}
                               >
-                                {r.willGenerateBack
+                                {row.willGenerateBack
                                   ? 'AI will generate on import'
-                                  : r.exampleBack
-                                    ? r.exampleBack
+                                  : row.exampleBack
+                                    ? row.exampleBack
                                     : '—'}
                               </Text>
                             </View>
@@ -878,9 +876,9 @@ export default function ImportCsvScreen() {
                 </Surface>
               )}
             </View>
-	          </>
-	        </ScrollView>
-	      )}
+          </>
+        </ScrollView>
+      )}
 
       <InfoModal visible={dedupeInfoOpen} title="Deduplicate" onClose={() => setDedupeInfoOpen(false)}>
         <Text variant="muted">
@@ -903,56 +901,45 @@ function ColumnSelect(props: {
   items: ColItem[];
   onChange: (v: number | null) => void;
 }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createColumnStyles(theme), [theme]);
   const [open, setOpen] = useState(false);
   const selected = props.items.find((i) => i.value === props.value)?.label ?? '—';
 
   if (Platform.OS === 'ios') {
     return (
-      <View style={{ gap: 8 }}>
+      <View style={styles.columnWrap}>
         <Row gap={12} align="center">
-          <Text variant="label" style={{ flex: 1 }}>
+          <Text variant="label" style={styles.columnLabel}>
             {props.label}
           </Text>
-        <Pressable
-          onPress={() => {
-            const options = props.items.map((i) => i.label).concat('Cancel');
-            const cancelButtonIndex = options.length - 1;
-            ActionSheetIOS.showActionSheetWithOptions(
-              {
-                title: props.label,
-                options,
-                cancelButtonIndex,
-                destructiveButtonIndex: undefined,
-                userInterfaceStyle: t.scheme,
-              },
-              (idx) => {
-                if (idx == null) return;
-                if (idx === cancelButtonIndex) return;
-                const picked = props.items[idx];
-                props.onChange(picked ? picked.value : null);
-              },
-            );
-          }}
-          style={({ pressed }) => ({
-            maxWidth: 190,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            borderRadius: 999,
-            backgroundColor: t.colors.surface,
-            borderWidth: 1,
-            borderColor: t.colors.border,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            opacity: pressed ? 0.85 : 1,
-          })}
-        >
-          <Text numberOfLines={1} style={{ flex: 1, paddingRight: 8, fontWeight: '800', fontSize: 13 }}>
-            {selected}
-          </Text>
-          <Ionicons name="chevron-down" size={14} color={t.colors.textMuted} />
-        </Pressable>
+          <Pressable
+            onPress={() => {
+              const options = props.items.map((i) => i.label).concat('Cancel');
+              const cancelButtonIndex = options.length - 1;
+              ActionSheetIOS.showActionSheetWithOptions(
+                {
+                  title: props.label,
+                  options,
+                  cancelButtonIndex,
+                  destructiveButtonIndex: undefined,
+                  userInterfaceStyle: theme.scheme,
+                },
+                (idx) => {
+                  if (idx == null) return;
+                  if (idx === cancelButtonIndex) return;
+                  const picked = props.items[idx];
+                  props.onChange(picked ? picked.value : null);
+                },
+              );
+            }}
+            style={({ pressed }) => [styles.selectButton, { opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text numberOfLines={1} style={styles.selectedText}>
+              {selected}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color={theme.colors.textMuted} />
+          </Pressable>
         </Row>
       </View>
     );
@@ -960,54 +947,34 @@ function ColumnSelect(props: {
 
   // Android: use an overlay chooser so the mapping screen remains easy to scroll.
   return (
-    <View style={{ gap: 8 }}>
+    <View style={styles.columnWrap}>
       <Row gap={12} align="center">
-        <Text variant="label" style={{ flex: 1 }}>
+        <Text variant="label" style={styles.columnLabel}>
           {props.label}
         </Text>
         <Pressable
           onPress={() => setOpen(true)}
-          style={({ pressed }) => ({
-            maxWidth: 190,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            borderRadius: 999,
-            backgroundColor: t.colors.surface,
-            borderWidth: 1,
-            borderColor: t.colors.border,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            opacity: pressed ? 0.85 : 1,
-          })}
+          style={({ pressed }) => [styles.selectButton, { opacity: pressed ? 0.85 : 1 }]}
         >
-          <Text numberOfLines={1} style={{ flex: 1, paddingRight: 8, fontWeight: '800', fontSize: 13 }}>
+          <Text numberOfLines={1} style={styles.selectedText}>
             {selected}
           </Text>
-          <Ionicons name="chevron-down" size={14} color={t.colors.textMuted} />
+          <Ionicons name="chevron-down" size={14} color={theme.colors.textMuted} />
         </Pressable>
       </Row>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <View style={styles.modalRoot}>
           <Pressable
             onPress={() => setOpen(false)}
-            style={{
-              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
-              backgroundColor: 'rgba(0,0,0,0.55)',
-            }}
+            style={styles.modalBackdrop}
           />
           <Surface
             radius={22}
-            style={{
-              padding: 14,
-              borderTopLeftRadius: 22,
-              borderTopRightRadius: 22,
-              maxHeight: '70%',
-            }}
+            style={styles.modalSheet}
           >
             <Text variant="h2">{props.label}</Text>
-            <View style={{ height: 10 }} />
+            <View style={styles.modalSpacer} />
             <ScrollView>
               {props.items.map((it, idx) => {
                 const active = it.value === props.value;
@@ -1018,24 +985,272 @@ function ColumnSelect(props: {
                       props.onChange(it.value);
                       setOpen(false);
                     }}
-                    style={({ pressed }) => ({
-                      paddingVertical: 12,
-                      paddingHorizontal: 12,
-                      borderRadius: 14,
-                      backgroundColor: active ? t.colors.surface2 : 'transparent',
-                      opacity: pressed ? 0.8 : 1,
-                    })}
+                    style={({ pressed }) => [
+                      styles.optionRow,
+                      { backgroundColor: active ? theme.colors.surface2 : 'transparent' },
+                      { opacity: pressed ? 0.8 : 1 },
+                    ]}
                   >
-                    <Text style={{ fontWeight: active ? '900' : '700' }}>{it.label}</Text>
+                    <Text style={[styles.optionText, { fontWeight: active ? '900' : '700' }]}>
+                      {it.label}
+                    </Text>
                   </Pressable>
                 );
               })}
             </ScrollView>
-            <View style={{ height: 10 }} />
+            <View style={styles.modalSpacer} />
             <Button title="Close" variant="secondary" onPress={() => setOpen(false)} />
           </Surface>
         </View>
       </Modal>
     </View>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerBackButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    emptyState: {
+      flex: 1,
+      padding: theme.spacing.lg,
+      justifyContent: 'center',
+    },
+    emptyContent: {
+      gap: 12,
+      alignItems: 'center',
+    },
+    centerText: {
+      textAlign: 'center',
+    },
+    spacer4: {
+      height: 4,
+    },
+    spacer6: {
+      height: 6,
+    },
+    spacer8: {
+      height: 8,
+    },
+    spacer10: {
+      height: 10,
+    },
+    spacer18: {
+      height: 18,
+    },
+    spacer22: {
+      height: 22,
+    },
+    stretchButton: {
+      alignSelf: 'stretch',
+    },
+    scrollContent: {
+      padding: theme.spacing.lg,
+      paddingTop: 12,
+      paddingBottom: 36,
+    },
+    section: {
+      gap: 10,
+    },
+    selectedCard: {
+      padding: 14,
+      borderRadius: 18,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    flex1: {
+      flex: 1,
+    },
+    fileName: {
+      fontWeight: '900' as const,
+    },
+    mappingSection: {
+      gap: 12,
+    },
+    rowLabelGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+    },
+    iconButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    fieldGroup: {
+      gap: 10,
+    },
+    detectingRow: {
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    aiSection: {
+      gap: 10,
+    },
+    aiHint: {
+      fontSize: 12,
+    },
+    aiHintLink: {
+      textDecorationLine: 'underline',
+      color: theme.colors.primary,
+      fontSize: 12,
+    },
+    progressCard: {
+      marginTop: 6,
+    },
+    progressTrack: {
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    progressTrackInner: {
+      height: 8,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface2,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: 999,
+      backgroundColor: theme.colors.primary2,
+      position: 'absolute',
+      left: 0,
+      top: 0,
+    },
+    indeterminateFill: {
+      height: '100%',
+      borderRadius: 999,
+      backgroundColor: theme.colors.primary2,
+      position: 'absolute',
+      left: 0,
+      top: 0,
+    },
+    failedText: {
+      color: theme.colors.danger,
+    },
+    previewSurface: {
+      overflow: 'hidden',
+    },
+    previewItem: {
+      padding: 14,
+    },
+    previewDivider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginBottom: 14,
+    },
+    previewContent: {
+      gap: 12,
+    },
+    previewRow: {
+      flexDirection: 'row',
+      gap: 14,
+    },
+    previewCol: {
+      flex: 1,
+      gap: 6,
+    },
+    previewLabel: {
+      color: theme.colors.textMuted,
+    },
+    previewValue: {
+      fontSize: 18,
+      fontWeight: '900' as const,
+    },
+    examplesBlock: {
+      gap: 6,
+    },
+    examplesHeader: {
+      paddingTop: 2,
+    },
+    examplesTitle: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '800' as const,
+      color: theme.colors.text,
+      opacity: 0.8,
+    },
+    examplesRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 10,
+    },
+    examplesLabel: {
+      color: theme.colors.textMuted,
+      width: 62,
+    },
+    examplesValue: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '500' as const,
+      color: theme.colors.textMuted,
+      opacity: 0.9,
+    },
+  });
+}
+
+function createColumnStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    columnWrap: {
+      gap: 8,
+    },
+    columnLabel: {
+      flex: 1,
+    },
+    selectButton: {
+      maxWidth: 190,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    selectedText: {
+      flex: 1,
+      paddingRight: 8,
+      fontWeight: '800' as const,
+      fontSize: 13,
+    },
+    modalRoot: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    modalBackdrop: {
+      ...(StyleSheet.absoluteFillObject as object),
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    modalSheet: {
+      padding: 14,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      maxHeight: '70%',
+    },
+    modalSpacer: {
+      height: 10,
+    },
+    optionRow: {
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+    },
+    optionText: {
+      fontWeight: '700' as const,
+    },
+  });
 }

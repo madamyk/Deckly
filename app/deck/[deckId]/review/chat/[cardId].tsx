@@ -9,6 +9,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   View,
 } from 'react-native';
 import Animated, {
@@ -48,7 +49,8 @@ const GRAMMAR_INSTRUCTION =
   'If this is a verb, include its key conjugation pattern or base forms. Format each form on its own line (use newline-separated lines). Otherwise decide the most helpful grammar guidance.';
 
 export default function CardChatScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { deckId, cardId } = useLocalSearchParams<{ deckId: string; cardId: string }>();
   const headerHeight = useHeaderHeight();
   const { prefs } = usePrefsStore();
@@ -116,7 +118,7 @@ export default function CardChatScreen() {
     if (!aiReady) return 'Enable AI Assist to start chatting...';
     return 'Ask anything';
   }, [aiReady]);
-  const accentColor = accent ?? t.colors.primary;
+  const accentColor = accent ?? theme.colors.primary;
   const reasoningLabel =
     chatReasoning === 'high' ? 'High' : chatReasoning === 'medium' ? 'Medium' : 'Low (default)';
   const secondaryOption = useMemo(() => getLanguageOption(secondaryLangCode), [secondaryLangCode]);
@@ -144,9 +146,9 @@ export default function CardChatScreen() {
     <Pressable
       onPress={() => setChatSettingsOpen(true)}
       hitSlop={10}
-      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, paddingHorizontal: 8, paddingVertical: 6 })}
+      style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.7 : 1 }]}
     >
-      <Ionicons name="options-outline" size={20} color={t.colors.textMuted} />
+      <Ionicons name="options-outline" size={20} color={theme.colors.textMuted} />
     </Pressable>
   );
 
@@ -186,8 +188,8 @@ export default function CardChatScreen() {
     return (
       <Screen edges={['left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: 'Ask the teacher' }} />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator color={t.colors.textMuted} />
+        <View style={styles.centered}>
+          <ActivityIndicator color={theme.colors.textMuted} />
         </View>
       </Screen>
     );
@@ -197,7 +199,7 @@ export default function CardChatScreen() {
     return (
       <Screen edges={['left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: 'Ask the teacher' }} />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+        <View style={styles.centeredWithGap}>
           <Text variant="h2">Card not found</Text>
           <Button title="Back" variant="secondary" onPress={() => router.back()} />
         </View>
@@ -209,72 +211,41 @@ export default function CardChatScreen() {
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: 'Explain more', headerRight }} />
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={styles.keyboardAvoider}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={headerHeight}
       >
         <ScrollView
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 20, flexGrow: 1 }}
+          contentContainerStyle={styles.scrollContent}
         >
-          <View style={{ flex: 1, gap: 12 }}>
+          <View style={styles.content}>
             {messages.length === 0 ? (
-              <View
-                style={{
-                  flex: 1,
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  width: '100%',
-                  paddingVertical: t.spacing.xl,
-                }}
-              >
-                <View
-                  style={{
-                    padding: 22,
-                    borderRadius: 18,
-                    backgroundColor: t.colors.surface2,
-                    width: '100%',
-                    marginHorizontal: t.spacing.sm,
-                  }}
-                >
-                  <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
+              <View style={styles.emptyState}>
+                <View style={styles.cardSummary}>
+                  <Text variant="label" style={styles.cardLabel}>
                     Front
                   </Text>
-                  <Text style={{ fontWeight: '800', textAlign: 'center' }}>{card.front}</Text>
-                  <View style={{ height: 14 }} />
-                  <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
+                  <Text style={styles.cardValue}>{card.front}</Text>
+                  <View style={styles.cardDivider} />
+                  <Text variant="label" style={styles.cardLabel}>
                     Back
                   </Text>
-                  <Text style={{ fontWeight: '800', textAlign: 'center' }}>{card.back}</Text>
+                  <Text style={styles.cardValue}>{card.back}</Text>
                 </View>
 
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: '700',
-                    textAlign: 'center',
-                    color: t.colors.textMuted,
-                  }}
-                >
+                <Text style={styles.emptyHint}>
                   Ask anything about meaning, usage, or translation.
                 </Text>
 
-                <View style={{ alignItems: 'center', width: '100%', marginTop: -4, gap: 8 }}>
+                <View style={styles.quickQuestions}>
                   {!inputFocused ? (
                     <>
-                      <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
+                      <Text variant="label" style={styles.cardLabel}>
                         Quick questions
                       </Text>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          flexWrap: 'wrap',
-                          gap: 8,
-                          justifyContent: 'center',
-                          width: '100%',
-                        }}
-                      >
+                      <View style={styles.quickQuestionsRow}>
                         {quickQuestions.map((q, idx) => {
                           const delayMs = 140 + idx * 120;
                           return (
@@ -282,17 +253,12 @@ export default function CardChatScreen() {
                               <Pressable
                                 onPress={() => handleSend(q.label, q.instruction)}
                                 disabled={!aiReady || sending}
-                                style={({ pressed }) => ({
-                                  paddingHorizontal: 10,
-                                  paddingVertical: 6,
-                                  borderRadius: 999,
-                                  backgroundColor: t.colors.surface2,
-                                  borderWidth: 1,
-                                  borderColor: t.colors.border,
-                                  opacity: !aiReady ? 0.45 : pressed ? 0.8 : 1,
-                                })}
+                                style={({ pressed }) => [
+                                  styles.quickQuestionButton,
+                                  { opacity: !aiReady ? 0.45 : pressed ? 0.8 : 1 },
+                                ]}
                               >
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: t.colors.text }}>
+                                <Text style={styles.quickQuestionText}>
                                   {q.label}
                                 </Text>
                               </Pressable>
@@ -305,57 +271,42 @@ export default function CardChatScreen() {
                 </View>
               </View>
             ) : (
-              <View
-                style={{
-                  padding: 22,
-                  borderRadius: 18,
-                  backgroundColor: t.colors.surface2,
-                  marginHorizontal: t.spacing.sm,
-                }}
-              >
-                <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
+              <View style={styles.cardSummary}>
+                <Text variant="label" style={styles.cardLabel}>
                   Front
                 </Text>
-                <Text style={{ fontWeight: '800', textAlign: 'center' }}>{card.front}</Text>
-                <View style={{ height: 14 }} />
-                <Text variant="label" style={{ color: t.colors.textMuted, textAlign: 'center' }}>
+                <Text style={styles.cardValue}>{card.front}</Text>
+                <View style={styles.cardDivider} />
+                <Text variant="label" style={styles.cardLabel}>
                   Back
                 </Text>
-                <Text style={{ fontWeight: '800', textAlign: 'center' }}>{card.back}</Text>
+                <Text style={styles.cardValue}>{card.back}</Text>
               </View>
             )}
 
             {!aiReady ? (
-              <View style={{ gap: 8 }}>
-                <Text style={{ color: t.colors.textMuted, fontWeight: '700' }}>
+              <View style={styles.aiWarning}>
+                <Text style={styles.aiWarningText}>
                   AI Assist is off or missing an API key.
                 </Text>
                 <Button title="Open AI settings" variant="secondary" onPress={() => router.push('/settings/ai')} />
               </View>
             ) : null}
 
-
-            <View style={{ gap: 10 }}>
+            <View style={styles.messageList}>
               {messages.map((m, idx) => {
                 const isUser = m.role === 'user';
                 return (
                   <View
                     key={`${m.role}-${idx}`}
-                    style={{
-                      alignSelf: isUser ? 'flex-end' : 'flex-start',
-                      maxWidth: '86%',
-                      padding: 12,
-                      borderRadius: 16,
-                      backgroundColor: isUser ? accentColor : t.colors.surface2,
-                    }}
+                    style={[
+                      styles.messageBubble,
+                      isUser ? styles.userBubble : styles.assistantBubble,
+                      { backgroundColor: isUser ? accentColor : theme.colors.surface2 },
+                    ]}
                   >
                     <Text
-                      style={{
-                        color: isUser ? '#FFFFFF' : t.colors.text,
-                        fontWeight: '400',
-                        fontSize: 14,
-                        lineHeight: 20,
-                      }}
+                      style={isUser ? styles.userMessageText : styles.assistantMessageText}
                     >
                       {m.text}
                     </Text>
@@ -364,29 +315,18 @@ export default function CardChatScreen() {
               })}
 
               {sending ? (
-                <View
-                  style={{
-                    alignSelf: 'flex-start',
-                    maxWidth: '86%',
-                    padding: 12,
-                    borderRadius: 16,
-                    backgroundColor: t.colors.surface2,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <ActivityIndicator color={t.colors.textMuted} />
+                <View style={styles.sendingBubble}>
+                  <ActivityIndicator color={theme.colors.textMuted} />
                   <Text variant="muted">Thinking…</Text>
                 </View>
               ) : null}
 
               {error ? (
-                <View style={{ gap: 8 }}>
-                  <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{error}</Text>
+                <View style={styles.errorWrap}>
+                  <Text style={styles.errorText}>{error}</Text>
                   <Pressable
                     onPress={() => router.push('/settings/ai-debug')}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                    style={({ pressed }) => [styles.errorLink, { opacity: pressed ? 0.7 : 1 }]}
                     hitSlop={8}
                   >
                     <Text variant="muted" style={{ textDecorationLine: 'underline' }}>
@@ -399,9 +339,9 @@ export default function CardChatScreen() {
           </View>
         </ScrollView>
 
-        <View style={{ padding: t.spacing.lg, paddingTop: 8 }}>
+        <View style={styles.inputBar}>
           <Row gap={10} align="center">
-            <View style={{ flex: 1 }}>
+            <View style={styles.inputWrap}>
               <Input
                 value={input}
                 onChangeText={setInput}
@@ -411,21 +351,17 @@ export default function CardChatScreen() {
                 editable={aiReady && !sending}
                 multiline
                 placeholderLines={1}
-                style={{ minHeight: 52, textAlignVertical: 'top' }}
+                style={styles.inputStyle}
               />
             </View>
             <Pressable
               onPress={() => handleSend(input)}
               disabled={!aiReady || sending || !input.trim()}
-              style={({ pressed }) => ({
-                height: 44,
-                width: 44,
-                borderRadius: 22,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: accentColor,
-                opacity: !aiReady || sending || !input.trim() ? 0.4 : pressed ? 0.85 : 1,
-              })}
+              style={({ pressed }) => [
+                styles.sendButton,
+                { backgroundColor: accentColor },
+                { opacity: !aiReady || sending || !input.trim() ? 0.4 : pressed ? 0.85 : 1 },
+              ]}
             >
               <Ionicons name="send" size={18} color="#FFFFFF" />
             </Pressable>
@@ -439,30 +375,20 @@ export default function CardChatScreen() {
         animationType="fade"
         onRequestClose={() => setChatSettingsOpen(false)}
       >
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
+        <View style={styles.modalRoot}>
           <Pressable
             onPress={() => setChatSettingsOpen(false)}
-            style={{
-              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
-              backgroundColor: 'rgba(0,0,0,0.45)',
-            }}
+            style={styles.modalBackdrop}
           />
-          <View
-            style={{
-              backgroundColor: t.colors.surface,
-              borderRadius: 18,
-              padding: 16,
-              gap: 10,
-            }}
-          >
+          <View style={styles.modalCard}>
             <Row>
               <Text variant="h2">Chat settings</Text>
               <Pressable onPress={() => setChatSettingsOpen(false)} hitSlop={10}>
-                <Ionicons name="close" size={20} color={t.colors.textMuted} />
+                <Ionicons name="close" size={20} color={theme.colors.textMuted} />
               </Pressable>
             </Row>
 
-            <View style={{ gap: 8 }}>
+            <View style={styles.modalSection}>
               <Text variant="label">Model</Text>
               {AI_MODELS.map((m) => {
                 const selected = m.value === chatModel;
@@ -470,26 +396,20 @@ export default function CardChatScreen() {
                   <Pressable
                     key={m.value}
                     onPress={() => setChatModel(m.value)}
-                    style={({ pressed }) => ({
-                      paddingVertical: 10,
-                      opacity: pressed ? 0.7 : 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    })}
+                    style={({ pressed }) => [styles.modalOption, { opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Text style={{ fontWeight: selected ? '800' : '600' }}>{m.label}</Text>
                     {selected ? (
-                      <Ionicons name="checkmark" size={18} color={t.colors.primary2} />
+                      <Ionicons name="checkmark" size={18} color={theme.colors.primary2} />
                     ) : null}
                   </Pressable>
                 );
               })}
             </View>
 
-            <View style={{ height: 1, backgroundColor: t.colors.border }} />
+            <View style={styles.modalDivider} />
 
-            <View style={{ gap: 8 }}>
+            <View style={styles.modalSection}>
               <Text variant="label">{`Reasoning · ${reasoningLabel}`}</Text>
               {(['low', 'medium', 'high'] as const).map((level) => {
                 const selected = chatReasoning === level;
@@ -499,17 +419,11 @@ export default function CardChatScreen() {
                   <Pressable
                     key={level}
                     onPress={() => setChatReasoning(level)}
-                    style={({ pressed }) => ({
-                      paddingVertical: 10,
-                      opacity: pressed ? 0.7 : 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    })}
+                    style={({ pressed }) => [styles.modalOption, { opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Text style={{ fontWeight: selected ? '800' : '600' }}>{label}</Text>
                     {selected ? (
-                      <Ionicons name="checkmark" size={18} color={t.colors.primary2} />
+                      <Ionicons name="checkmark" size={18} color={theme.colors.primary2} />
                     ) : null}
                   </Pressable>
                 );
@@ -520,6 +434,194 @@ export default function CardChatScreen() {
       </Modal>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    centered: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    centeredWithGap: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 10,
+    },
+    keyboardAvoider: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: theme.spacing.lg,
+      paddingBottom: 20,
+      flexGrow: 1,
+    },
+    content: {
+      flex: 1,
+      gap: 12,
+    },
+    emptyState: {
+      flex: 1,
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%',
+      paddingVertical: theme.spacing.xl,
+    },
+    cardSummary: {
+      padding: 22,
+      borderRadius: 18,
+      backgroundColor: theme.colors.surface2,
+      width: '100%',
+      marginHorizontal: theme.spacing.sm,
+    },
+    cardLabel: {
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+    cardValue: {
+      fontWeight: '800' as const,
+      textAlign: 'center',
+    },
+    cardDivider: {
+      height: 14,
+    },
+    emptyHint: {
+      fontSize: 16,
+      fontWeight: '700' as const,
+      textAlign: 'center',
+      color: theme.colors.textMuted,
+    },
+    quickQuestions: {
+      alignItems: 'center',
+      width: '100%',
+      marginTop: -4,
+      gap: 8,
+    },
+    quickQuestionsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      justifyContent: 'center',
+      width: '100%',
+    },
+    quickQuestionButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    quickQuestionText: {
+      fontSize: 12,
+      fontWeight: '600' as const,
+      color: theme.colors.text,
+    },
+    aiWarning: {
+      gap: 8,
+    },
+    aiWarningText: {
+      color: theme.colors.textMuted,
+      fontWeight: '700' as const,
+    },
+    messageList: {
+      gap: 10,
+    },
+    messageBubble: {
+      maxWidth: '86%',
+      padding: 12,
+      borderRadius: 16,
+    },
+    userBubble: {
+      alignSelf: 'flex-end',
+    },
+    assistantBubble: {
+      alignSelf: 'flex-start',
+    },
+    userMessageText: {
+      color: '#FFFFFF',
+      fontWeight: '400' as const,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    assistantMessageText: {
+      color: theme.colors.text,
+      fontWeight: '400' as const,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    sendingBubble: {
+      alignSelf: 'flex-start',
+      maxWidth: '86%',
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: theme.colors.surface2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    errorWrap: {
+      gap: 8,
+    },
+    errorText: {
+      color: theme.colors.danger,
+      fontWeight: '700' as const,
+    },
+    errorLink: {
+      alignSelf: 'flex-start',
+    },
+    inputBar: {
+      padding: theme.spacing.lg,
+      paddingTop: 8,
+    },
+    inputWrap: {
+      flex: 1,
+    },
+    inputStyle: {
+      minHeight: 52,
+      textAlignVertical: 'top',
+    },
+    sendButton: {
+      height: 44,
+      width: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalRoot: {
+      flex: 1,
+      padding: 20,
+      justifyContent: 'center',
+    },
+    modalBackdrop: {
+      ...(StyleSheet.absoluteFillObject as object),
+      backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    modalCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 18,
+      padding: 16,
+      gap: 10,
+    },
+    modalSection: {
+      gap: 8,
+    },
+    modalOption: {
+      paddingVertical: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    modalDivider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+  });
 }
 
 function AnimatedPill({ delayMs, children }: { delayMs: number; children: React.ReactNode }) {

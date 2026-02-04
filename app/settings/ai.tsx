@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Picker } from '@react-native-picker/picker';
 import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 
 import { getAiApiKey, setAiApiKey } from '@/data/secureStore';
@@ -18,7 +18,8 @@ import { ToggleRow } from '@/ui/components/ToggleRow';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export default function AiSettingsScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { prefs, patchPrefs } = usePrefsStore();
 
   const [apiKeySaved, setApiKeySaved] = useState(false);
@@ -88,8 +89,8 @@ export default function AiSettingsScreen() {
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: 'AI Assist' }} />
-      <ScrollView contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 30 }}>
-        <View style={{ gap: 10 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.introStack}>
           <Text variant="h2">AI Assist</Text>
           <Text variant="muted">
             Generate bilingual example sentence pairs and short notes for your cards when requested.
@@ -97,10 +98,10 @@ export default function AiSettingsScreen() {
           <Text variant="muted">Uses your OpenAI API key, runs over the network, and may cost money.</Text>
         </View>
 
-        <View style={{ height: 16 }} />
+        <View style={styles.sectionSpacer} />
 
-        <View style={{ gap: 18 }}>
-          <View style={{ gap: 10 }}>
+        <View style={styles.sectionStack}>
+          <View style={styles.blockStack}>
             <ToggleRow
               label="Enable AI features"
               value={prefs.ai.enabled}
@@ -113,12 +114,12 @@ export default function AiSettingsScreen() {
                 await patchPrefs({ ai: { enabled: next } });
               }}
             />
-            <View style={{ height: 10 }} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={styles.statusSpacer} />
+            <View style={styles.statusRow}>
               <Ionicons
                 name={aiReady ? 'checkmark-circle' : 'alert-circle'}
                 size={18}
-                color={aiReady ? t.colors.success : t.colors.textMuted}
+                color={aiReady ? theme.colors.success : theme.colors.textMuted}
               />
               <Text variant="muted">
                 {prefs.ai.enabled ? (apiKeySaved ? 'Enabled' : 'Enabled (missing key)') : 'Disabled'}
@@ -126,13 +127,13 @@ export default function AiSettingsScreen() {
             </View>
           </View>
 
-          <View style={{ height: 1, backgroundColor: t.colors.border }} />
+          <View style={styles.divider} />
 
-          <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <View style={{ flex: 1, gap: 4 }}>
+          <View style={styles.blockStack}>
+            <View style={styles.rowBetween}>
+              <View style={styles.rowInfo}>
                 <Text variant="label">OpenAI API key</Text>
-                <Text style={{ fontWeight: '800' }}>{apiKeySaved ? 'Saved (••••••••)' : 'Not set'}</Text>
+                <Text style={styles.rowValue}>{apiKeySaved ? 'Saved (••••••••)' : 'Not set'}</Text>
               </View>
               <Button
                 title={apiKeySaved ? 'Change' : 'Add'}
@@ -146,14 +147,14 @@ export default function AiSettingsScreen() {
             <Text variant="muted">Stored locally on this device.</Text>
           </View>
 
-          <View style={{ height: 1, backgroundColor: t.colors.border }} />
+          <View style={styles.divider} />
 
-          <View style={{ gap: 14 }}>
-            <View style={{ gap: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <View style={{ flex: 1, gap: 4 }}>
+          <View style={styles.sectionInner}>
+            <View style={styles.blockStack}>
+              <View style={styles.rowBetween}>
+                <View style={styles.rowInfo}>
                   <Text variant="label">Model</Text>
-                  <Text style={{ fontWeight: '800' }}>{modelLabel}</Text>
+                  <Text style={styles.rowValue}>{modelLabel}</Text>
                 </View>
                 <Button
                   title={modelOpen ? 'Done' : 'Change'}
@@ -173,20 +174,20 @@ export default function AiSettingsScreen() {
               ) : null}
             </View>
 
-            <View style={{ gap: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.blockStack}>
+              <View style={styles.rowBetween}>
+                <View style={styles.rowInfo}>
+                  <View style={styles.labelRow}>
                     <Text variant="label">Reasoning</Text>
                     <Pressable
                       onPress={() => setReasoningInfoOpen(true)}
                       hitSlop={10}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                      style={({ pressed }) => [styles.infoButton, { opacity: pressed ? 0.7 : 1 }]}
                     >
-                      <Ionicons name="information-circle-outline" size={16} color={t.colors.textMuted} />
+                      <Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} />
                     </Pressable>
                   </View>
-                  <Text style={{ fontWeight: '800' }}>{reasoningLabel}</Text>
+                  <Text style={styles.rowValue}>{reasoningLabel}</Text>
                 </View>
                 <Button
                   title={reasoningOpen ? 'Done' : 'Change'}
@@ -206,20 +207,20 @@ export default function AiSettingsScreen() {
               ) : null}
             </View>
 
-            <View style={{ gap: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.blockStack}>
+              <View style={styles.rowBetween}>
+                <View style={styles.rowInfo}>
+                  <View style={styles.labelRow}>
                     <Text variant="label">Language level</Text>
                     <Pressable
                       onPress={() => setLevelInfoOpen(true)}
                       hitSlop={10}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                      style={({ pressed }) => [styles.infoButton, { opacity: pressed ? 0.7 : 1 }]}
                     >
-                      <Ionicons name="information-circle-outline" size={16} color={t.colors.textMuted} />
+                      <Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} />
                     </Pressable>
                   </View>
-                  <Text style={{ fontWeight: '800' }}>{levelLabel}</Text>
+                  <Text style={styles.rowValue}>{levelLabel}</Text>
                 </View>
                 <Button
                   title={levelOpen ? 'Done' : 'Change'}
@@ -241,21 +242,18 @@ export default function AiSettingsScreen() {
           </View>
         </View>
 
-        <View style={{ height: 12 }} />
+        <View style={styles.footerSpacer} />
         <Pressable
           onPress={() => router.push('/settings/ai-debug')}
           style={({ pressed }) => ({
-            paddingVertical: 10,
+            ...styles.debugLink,
             opacity: pressed ? 0.75 : 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
           })}
         >
-          <Text variant="muted" style={{ fontWeight: '700' }}>
+          <Text variant="muted" style={styles.debugText}>
             View AI debug logs
           </Text>
-          <Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
         </Pressable>
       </ScrollView>
 
@@ -268,19 +266,16 @@ export default function AiSettingsScreen() {
           setKeyDraft('');
         }}
       >
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
+        <View style={styles.modalRoot}>
           <Pressable
             onPress={() => {
               setKeyEditorOpen(false);
               setKeyDraft('');
             }}
-            style={{
-              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
-              backgroundColor: 'rgba(0,0,0,0.55)',
-            }}
+            style={styles.modalBackdrop}
           />
           <Animated.View style={modalShiftStyle}>
-            <Surface radius={22} style={{ gap: 10, padding: 16 }}>
+            <Surface radius={22} style={styles.modalCard}>
               <Text variant="h2">{apiKeySaved ? 'Replace API key' : 'Add API key'}</Text>
               <Text variant="muted">This key stays on your device. Requests go directly to OpenAI.</Text>
               <Input
@@ -293,8 +288,8 @@ export default function AiSettingsScreen() {
                 autoCorrect={false}
                 editable
               />
-              <View style={{ height: 4 }} />
-              <View style={{ gap: 10 }}>
+              <View style={styles.modalSpacer} />
+              <View style={styles.modalActions}>
                 <Button title="Save key" onPress={saveKey} />
                 {apiKeySaved ? <Button title="Remove key" variant="dangerGhost" onPress={removeKey} /> : null}
                 <Button
@@ -334,4 +329,93 @@ export default function AiSettingsScreen() {
       </InfoModal>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    scrollContent: {
+      padding: theme.spacing.lg,
+      paddingBottom: 30,
+    },
+    introStack: {
+      gap: 10,
+    },
+    sectionSpacer: {
+      height: 16,
+    },
+    sectionStack: {
+      gap: 18,
+    },
+    sectionInner: {
+      gap: 14,
+    },
+    blockStack: {
+      gap: 10,
+    },
+    statusSpacer: {
+      height: 10,
+    },
+    statusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+    rowBetween: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    rowInfo: {
+      flex: 1,
+      gap: 4,
+    },
+    labelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    infoButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowValue: {
+      fontWeight: '800' as const,
+    },
+    footerSpacer: {
+      height: 12,
+    },
+    debugLink: {
+      paddingVertical: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    debugText: {
+      fontWeight: '700' as const,
+    },
+    modalRoot: {
+      flex: 1,
+      padding: 20,
+      justifyContent: 'center',
+    },
+    modalBackdrop: {
+      ...(StyleSheet.absoluteFillObject as object),
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    modalCard: {
+      gap: 10,
+      padding: 16,
+    },
+    modalSpacer: {
+      height: 4,
+    },
+    modalActions: {
+      gap: 10,
+    },
+  });
 }

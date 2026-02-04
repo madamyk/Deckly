@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getDeckStats } from '@/data/repositories/decksRepo';
@@ -18,7 +18,8 @@ import { useDecklyTheme } from '@/ui/theme/provider';
 import { nowMs } from '@/utils/time';
 
 export default function HomeScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { decks, loading, error, refresh } = useDecksStore();
   const [statsByDeckId, setStatsByDeckId] = useState<Record<string, DeckStats>>({});
   const insets = useSafeAreaInsets();
@@ -62,35 +63,20 @@ export default function HomeScreen() {
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={{ marginBottom: t.spacing.lg, gap: 10 }}>
-        <Row style={{ alignItems: 'center' }}>
-          <Text variant="title" style={{ fontSize: 40, lineHeight: 44 }}>
+      <View style={styles.header}>
+        <Row style={styles.headerRow}>
+          <Text variant="title" style={styles.title}>
             Deckly
           </Text>
           <Pressable
             hitSlop={10}
             onPress={() => router.push('/settings')}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 10,
-              borderRadius: 999,
-              backgroundColor: t.colors.surface2,
-              borderWidth: 1,
-              borderColor: t.colors.border,
-            }}
+            style={styles.settingsButton}
           >
-            <Ionicons name="settings-outline" size={20} color={t.colors.text} />
+            <Ionicons name="settings-outline" size={20} color={theme.colors.text} />
           </Pressable>
         </Row>
-        <Text
-          variant="muted"
-          style={{
-            fontSize: 14,
-            lineHeight: 22,
-            fontWeight: '400',
-            maxWidth: 320,
-          }}
-        >
+        <Text variant="muted" style={styles.subheader}>
           Offline-first language flashcards with spaced repetition, plus AI-generated examples and notes you
           can save and review later.
         </Text>
@@ -105,29 +91,28 @@ export default function HomeScreen() {
         <FlatList
           data={decks}
           keyExtractor={(d) => d.id}
-          contentContainerStyle={{ paddingTop: 6, paddingBottom: 120 + insets.bottom }}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 120 + insets.bottom }]}
           renderItem={({ item }) => (
-            <Pressable onPress={() => router.push(`/deck/${item.id}`)} style={{ marginBottom: 12 }}>
+            <Pressable onPress={() => router.push(`/deck/${item.id}`)} style={styles.deckPressable}>
               <Card>
-                <Row align="center" style={{ justifyContent: 'space-between' }}>
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Row gap={10} style={{ justifyContent: 'flex-start' }}>
+                <Row align="center" style={styles.deckRow}>
+                  <View style={styles.deckLeft}>
+                    <Row gap={10} style={styles.deckTitleRow}>
                       <View
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 999,
-                          marginTop: 5,
-                          backgroundColor:
-                            resolveDeckAccentColor(item.accentColor) ?? t.colors.primary,
-                          opacity: (statsByDeckId[item.id]?.due ?? 0) > 0 ? 1 : 0.7,
-                        }}
+                        style={[
+                          styles.deckDot,
+                          {
+                            backgroundColor:
+                              resolveDeckAccentColor(item.accentColor) ?? theme.colors.primary,
+                            opacity: (statsByDeckId[item.id]?.due ?? 0) > 0 ? 1 : 0.7,
+                          },
+                        ]}
                       />
                       <Text variant="h2" numberOfLines={1} style={{ flex: 1 }}>
                         {item.name}
                       </Text>
                     </Row>
-                    <View style={{ height: 6 }} />
+                    <View style={styles.deckStatsSpacer} />
                     {(() => {
                       const total = statsByDeckId[item.id]?.total ?? 0;
                       return (
@@ -137,8 +122,8 @@ export default function HomeScreen() {
                       );
                     })()}
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text variant="label" style={{ color: t.colors.textMuted }}>
+                  <View style={styles.dueWrap}>
+                    <Text variant="label" style={styles.dueLabel}>
                       Due now
                     </Text>
                     {(() => {
@@ -148,14 +133,7 @@ export default function HomeScreen() {
                       return (
                         <Text
                           numberOfLines={1}
-                          style={{
-                            minWidth: 56,
-                            textAlign: 'right',
-                            fontSize,
-                            lineHeight: fontSize + 4,
-                            fontWeight: '900',
-                            color: t.colors.text,
-                          }}
+                          style={[styles.dueValue, { fontSize, lineHeight: fontSize + 4 }]}
                         >
                           {dueLabel}
                         </Text>
@@ -169,43 +147,120 @@ export default function HomeScreen() {
         />
       )}
 
-      <View
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          paddingHorizontal: t.spacing.lg,
-          paddingTop: 10,
-          paddingBottom: 10 + insets.bottom,
-        }}
-      >
+      <View style={[styles.bottomCtaWrap, { paddingBottom: 10 + insets.bottom }]}>
         <Pressable
           onPress={() => router.push('/deck/new')}
-          style={({ pressed }) => [{ alignSelf: 'center', opacity: pressed ? 0.9 : 1 }]}
+          style={({ pressed }) => [styles.addDeckPressable, { opacity: pressed ? 0.9 : 1 }]}
         >
           <LinearGradient
-            colors={[t.colors.primaryGradientStart, t.colors.primaryGradientEnd]}
+            colors={[theme.colors.primaryGradientStart, theme.colors.primaryGradientEnd]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={{
-              borderRadius: 999,
-              paddingVertical: 12,
-              paddingHorizontal: 18,
-              shadowColor: t.colors.shadow,
-              shadowOpacity: 0.22,
-              shadowRadius: 18,
-              shadowOffset: { width: 0, height: 12 },
-              elevation: 6,
-            }}
+            style={styles.addDeckGradient}
           >
-            <Row gap={8} style={{ justifyContent: 'center' }}>
+            <Row gap={8} style={styles.addDeckRow}>
               <Ionicons name="add" size={18} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '900' }}>New deck</Text>
+              <Text style={styles.addDeckText}>New deck</Text>
             </Row>
           </LinearGradient>
         </Pressable>
       </View>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    header: {
+      marginBottom: theme.spacing.lg,
+      gap: 10,
+    },
+    headerRow: {
+      alignItems: 'center',
+    },
+    title: {
+      fontSize: 40,
+      lineHeight: 44,
+    },
+    settingsButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    subheader: {
+      fontSize: 14,
+      lineHeight: 22,
+      fontWeight: '400' as const,
+      maxWidth: 320,
+    },
+    listContent: {
+      paddingTop: 6,
+      paddingBottom: 120,
+    },
+    deckPressable: {
+      marginBottom: 12,
+    },
+    deckRow: {
+      justifyContent: 'space-between',
+    },
+    deckLeft: {
+      flex: 1,
+      paddingRight: 12,
+    },
+    deckTitleRow: {
+      justifyContent: 'flex-start',
+    },
+    deckDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      marginTop: 5,
+    },
+    deckStatsSpacer: {
+      height: 6,
+    },
+    dueWrap: {
+      alignItems: 'flex-end',
+    },
+    dueLabel: {
+      color: theme.colors.textMuted,
+    },
+    dueValue: {
+      minWidth: 56,
+      textAlign: 'right' as const,
+      fontWeight: '900' as const,
+      color: theme.colors.text,
+    },
+    bottomCtaWrap: {
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: 10,
+    },
+    addDeckPressable: {
+      alignSelf: 'center',
+    },
+    addDeckGradient: {
+      borderRadius: 999,
+      paddingVertical: 12,
+      paddingHorizontal: 18,
+      shadowColor: theme.colors.shadow,
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 6,
+    },
+    addDeckRow: {
+      justifyContent: 'center',
+    },
+    addDeckText: {
+      color: '#fff',
+      fontWeight: '900' as const,
+    },
+  });
 }

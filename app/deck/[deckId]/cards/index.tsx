@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
@@ -16,7 +16,8 @@ import { formatDueRelative, nowMs } from '@/utils/time';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export default function CardListScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const [cards, setCards] = useState<CardModel[]>([]);
@@ -32,30 +33,30 @@ export default function CardListScreen() {
     }, [load]),
   );
 
-  const headerRight = useMemo(
-    () => () => (
+  const HeaderRight = useCallback(
+    () => (
       <Pressable
         hitSlop={10}
         onPress={() => router.push(`/deck/${deckId}/cards/new`)}
-        style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+        style={styles.headerButton}
       >
-        <Ionicons name="add" size={24} color={t.colors.text} />
+        <Ionicons name="add" size={24} color={theme.colors.text} />
       </Pressable>
     ),
-    [deckId, t.colors.text],
+    [deckId, theme.colors.text, styles.headerButton],
   );
 
   return (
     <Screen padded={false} edges={['top', 'left', 'right']}>
-      <Stack.Screen options={{ headerRight }} />
+      <Stack.Screen options={{ headerRight: HeaderRight }} />
 
       {cards.length === 0 ? (
-        <View style={{ flex: 1, paddingHorizontal: t.spacing.lg }}>
+        <View style={styles.emptyWrap}>
           <Text variant="h2">No cards</Text>
           <Text variant="muted">
             Add cards manually or import a CSV to start building this deck.
           </Text>
-          <View style={{ height: 14 }} />
+          <View style={styles.emptySpacer} />
           <Button title="Add a card" onPress={() => router.push(`/deck/${deckId}/cards/new`)} />
         </View>
       ) : (
@@ -63,9 +64,9 @@ export default function CardListScreen() {
           data={cards}
           keyExtractor={(c) => c.id}
           // Make the scroll indicator sit on the screen edge while keeping content padded.
-          style={{ flex: 1 }}
+          style={styles.list}
           contentContainerStyle={{
-            paddingHorizontal: t.spacing.lg,
+            paddingHorizontal: theme.spacing.lg,
             // Only enough room for the home indicator; avoid a "dead" looking gap.
             paddingBottom: insets.bottom + 8,
           }}
@@ -85,12 +86,12 @@ export default function CardListScreen() {
                   },
                 ]);
               }}
-              style={{ marginBottom: 12 }}
+              style={styles.cardPressable}
             >
               <Card>
-                <View style={{ gap: 6 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                    <View style={{ flex: 1, paddingRight: 10 }}>
+                <View style={styles.cardContent}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={styles.cardHeaderText}>
                       <Text variant="h2" numberOfLines={1}>
                         {item.front}
                       </Text>
@@ -98,25 +99,19 @@ export default function CardListScreen() {
                     <Pill
                       label={cardStateLabel(item.state)}
                       tone={cardStateTone(item.state)}
-                      style={{ alignSelf: 'flex-start' }}
+                      style={styles.cardPill}
                     />
                   </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-                    <View style={{ flex: 1, paddingRight: 10 }}>
+                  <View style={styles.cardFooterRow}>
+                    <View style={styles.cardFooterText}>
                       <Text variant="muted" numberOfLines={2}>
                         {item.back}
                       </Text>
                     </View>
                     <Text
                       numberOfLines={1}
-                      style={{
-                        color: t.colors.textMuted,
-                        fontSize: 12,
-                        lineHeight: 22,
-                        fontWeight: '500',
-                        textAlign: 'right',
-                      }}
+                      style={styles.cardDueText}
                     >
                       {formatDueRelative(item.dueAt, nowMs())}
                     </Text>
@@ -129,4 +124,55 @@ export default function CardListScreen() {
       )}
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    emptyWrap: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+    },
+    emptySpacer: {
+      height: 14,
+    },
+    list: {
+      flex: 1,
+    },
+    cardPressable: {
+      marginBottom: 12,
+    },
+    cardContent: {
+      gap: 6,
+    },
+    cardHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    cardHeaderText: {
+      flex: 1,
+      paddingRight: 10,
+    },
+    cardPill: {
+      alignSelf: 'flex-start',
+    },
+    cardFooterRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+    },
+    cardFooterText: {
+      flex: 1,
+      paddingRight: 10,
+    },
+    cardDueText: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      lineHeight: 22,
+      fontWeight: '500' as const,
+      textAlign: 'right',
+    },
+  });
 }

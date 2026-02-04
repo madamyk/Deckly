@@ -14,7 +14,7 @@ export function FlipCard(props: {
   flipped: boolean;
   onToggle: () => void;
 }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const anim = useRef(new Animated.Value(props.flipped ? 1 : 0)).current;
 
   React.useEffect(() => {
@@ -30,8 +30,8 @@ export function FlipCard(props: {
     outputRange: ['180deg', '360deg'],
   });
   const baseCardStyle = useMemo(
-    () => [{ borderColor: t.colors.border, backgroundColor: t.colors.surface }] as const,
-    [t],
+    () => [{ borderColor: theme.colors.border, backgroundColor: theme.colors.surface }] as const,
+    [theme],
   );
 
   return (

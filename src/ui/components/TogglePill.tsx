@@ -31,12 +31,12 @@ export function TogglePill({
   inactiveBorderColor,
   style,
 }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
 
   const useGradient = value && !activeBg;
-  const bg = value ? activeBg ?? t.colors.primary : inactiveBg ?? t.colors.surface;
-  const fg = value ? activeFg ?? '#fff' : inactiveFg ?? t.colors.text;
-  const borderColor = value ? activeBorderColor ?? 'transparent' : inactiveBorderColor ?? t.colors.border;
+  const bg = value ? activeBg ?? theme.colors.primary : inactiveBg ?? theme.colors.surface;
+  const fg = value ? activeFg ?? '#fff' : inactiveFg ?? theme.colors.text;
+  const borderColor = value ? activeBorderColor ?? 'transparent' : inactiveBorderColor ?? theme.colors.border;
 
   return (
     <Pressable
@@ -57,7 +57,7 @@ export function TogglePill({
     >
       {useGradient ? (
         <LinearGradient
-          colors={[t.colors.primaryGradientStart, t.colors.primaryGradientEnd]}
+          colors={[theme.colors.primaryGradientStart, theme.colors.primaryGradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}

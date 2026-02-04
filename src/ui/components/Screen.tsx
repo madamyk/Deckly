@@ -18,20 +18,20 @@ export function Screen({
   children,
   ...rest
 }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   return (
     <LinearGradient
-      colors={[t.colors.bgGradientTop, t.colors.bgGradientBottom]}
+      colors={[theme.colors.bgGradientTop, theme.colors.bgGradientBottom]}
       style={styles.gradient}
     >
-      <StatusBar style={t.scheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView edges={edges} style={styles.safe}>
         <View
           {...rest}
           style={[
             styles.container,
-            padded && { padding: t.spacing.lg },
-            Platform.OS === 'android' && { paddingTop: t.spacing.lg },
+            padded && { padding: theme.spacing.lg },
+            Platform.OS === 'android' && { paddingTop: theme.spacing.lg },
             style,
           ]}
         >

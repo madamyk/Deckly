@@ -15,12 +15,12 @@ function strengthLevel(card: Card): number {
 }
 
 export function StrengthDots(props: { card: Card }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const level = useMemo(() => strengthLevel(props.card), [props.card]);
 
   return (
     <View style={styles.wrap}>
-      <Text variant="mono" style={{ color: t.colors.textMuted }}>
+      <Text variant="mono" style={{ color: theme.colors.textMuted }}>
         Strength
       </Text>
       <View style={styles.dots}>
@@ -32,8 +32,8 @@ export function StrengthDots(props: { card: Card }) {
               style={[
                 styles.dot,
                 {
-                  backgroundColor: filled ? t.colors.primary2 : 'transparent',
-                  borderColor: filled ? 'transparent' : t.colors.border,
+                  backgroundColor: filled ? theme.colors.primary2 : 'transparent',
+                  borderColor: filled ? 'transparent' : theme.colors.border,
                 },
               ]}
             />

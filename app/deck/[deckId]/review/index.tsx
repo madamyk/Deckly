@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInRight, FadeOutLeft, FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -23,7 +23,8 @@ import { useDecklyTheme } from '@/ui/theme/provider';
 import { usePrefsStore } from '@/stores/prefsStore';
 
 export default function ReviewScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const { prefs } = usePrefsStore();
 
@@ -97,11 +98,6 @@ export default function ReviewScreen() {
     return () => clearTimeout(id);
   }, [animateExamples]);
 
-  useEffect(() => {
-    currentIdRef.current = current?.id ?? null;
-    flippedRef.current = !!current && flippedId === current.id;
-  }, [current, flippedId]);
-
   const current = queue[index] ?? null;
   const flipped = !!current && flippedId === current.id;
   const frontText = current ? (studyReversed ? current.back : current.front) : '';
@@ -119,6 +115,11 @@ export default function ReviewScreen() {
     if (!queue.length) return '0/0';
     return `${Math.min(index + 1, queue.length)}/${queue.length}`;
   }, [index, queue.length]);
+
+  useEffect(() => {
+    currentIdRef.current = current?.id ?? null;
+    flippedRef.current = !!current && flippedId === current.id;
+  }, [current, flippedId]);
 
   async function rate(rating: Rating) {
     if (!current) return;
@@ -182,7 +183,7 @@ export default function ReviewScreen() {
   }
 
   const headerRight = () => (
-    <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+    <Row gap={8} style={styles.headerRightRow}>
       <Pressable
         onPress={() => {
           softHaptic();
@@ -192,16 +193,12 @@ export default function ReviewScreen() {
           setExamplesEnabled(nextEnabled);
         }}
         hitSlop={12}
-        style={({ pressed }) => ({
-          paddingHorizontal: 8,
-          paddingVertical: 6,
-          opacity: pressed ? 0.6 : 1,
-        })}
+        style={({ pressed }) => [styles.headerIconButton, { opacity: pressed ? 0.6 : 1 }]}
       >
         <Ionicons
           name={examplesEnabled ? 'eye-outline' : 'eye-off-outline'}
           size={20}
-          color={t.colors.textMuted}
+          color={theme.colors.textMuted}
         />
       </Pressable>
 
@@ -215,13 +212,9 @@ export default function ReviewScreen() {
             });
           }}
           hitSlop={12}
-          style={({ pressed }) => ({
-            paddingHorizontal: 8,
-            paddingVertical: 6,
-            opacity: pressed ? 0.6 : 1,
-          })}
+          style={({ pressed }) => [styles.headerIconButton, { opacity: pressed ? 0.6 : 1 }]}
         >
-          <Ionicons name="create-outline" size={20} color={t.colors.textMuted} />
+          <Ionicons name="create-outline" size={20} color={theme.colors.textMuted} />
         </Pressable>
       ) : null}
 
@@ -233,13 +226,12 @@ export default function ReviewScreen() {
             undoLast();
           }}
           hitSlop={12}
-          style={({ pressed }) => ({
-            paddingHorizontal: 8,
-            paddingVertical: 6,
-            opacity: loading ? 0.4 : pressed ? 0.6 : 1,
-          })}
+          style={({ pressed }) => [
+            styles.headerIconButton,
+            { opacity: loading ? 0.4 : pressed ? 0.6 : 1 },
+          ]}
         >
-          <Ionicons name="time-outline" size={20} color={t.colors.textMuted} />
+          <Ionicons name="time-outline" size={20} color={theme.colors.textMuted} />
         </Pressable>
       ) : null}
     </Row>
@@ -292,15 +284,15 @@ export default function ReviewScreen() {
         entering={FadeInRight.duration(180)}
         exiting={FadeOutLeft.duration(140)}
       >
-        <Row style={{ marginBottom: t.spacing.md }}>
-          <Text variant="mono" style={{ color: t.colors.textMuted }}>
+        <Row style={styles.progressRow}>
+          <Text variant="mono" style={styles.progressText}>
             {progress}
           </Text>
-          <Row gap={10} style={{ justifyContent: 'flex-end' }}>
+          <Row gap={10} style={styles.progressActions}>
             <Pill
               label={cardStateLabel(current.state)}
               tone={cardStateTone(current.state)}
-              style={{ alignSelf: 'center' }}
+              style={styles.progressPill}
             />
           </Row>
         </Row>
@@ -379,11 +371,13 @@ export default function ReviewScreen() {
               </Row>
             </View>
 
-            <View style={{ height: 10 }} />
+            <View style={styles.actionsSpacer} />
             <Button
               title="Ask about this card"
               variant="secondary"
-              left={<Ionicons name="chatbubble-ellipses-outline" size={18} color={t.colors.text} />}
+              left={
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color={theme.colors.text} />
+              }
               onPress={() => {
                 resumeRef.current = true;
                 router.push({
@@ -397,34 +391,23 @@ export default function ReviewScreen() {
               <Animated.View
                 entering={noteAnimate ? FadeInDown.duration(140) : undefined}
                 exiting={noteAnimate ? FadeOutDown.duration(120) : undefined}
-                style={{
-                  marginTop: 12,
-                  padding: 12,
-                  borderRadius: 16,
-                  backgroundColor: t.colors.surface2,
-                }}
+                style={styles.noteCard}
               >
-                <Row gap={8} style={{ alignItems: 'flex-start' }}>
+                <Row gap={8} style={styles.noteRow}>
                   <Ionicons
                     name="information-circle-outline"
                     size={16}
-                    color={t.colors.textMuted}
-                    style={{ marginTop: 2 }}
+                    color={theme.colors.textMuted}
+                    style={styles.noteIcon}
                   />
-                  <View style={{ flex: 1, maxHeight: 140 }}>
+                  <View style={styles.noteContent}>
                     <ScrollView
                       nestedScrollEnabled
                       showsVerticalScrollIndicator
-                      contentContainerStyle={{ paddingRight: 4 }}
+                      contentContainerStyle={styles.noteScrollContent}
                     >
                       <Text
-                        style={{
-                          fontSize: 13,
-                          lineHeight: 18,
-                          fontWeight: '400',
-                          color: t.colors.textMuted,
-                          textAlign: 'left',
-                        }}
+                        style={styles.noteText}
                       >
                         {note}
                       </Text>
@@ -436,7 +419,7 @@ export default function ReviewScreen() {
           </>
         ) : (
           <>
-            <View style={{ height: 8 }} />
+            <View style={styles.unflippedSpacer} />
           </>
         )}
       </Animated.View>
@@ -448,28 +431,19 @@ function ExampleFooter(props: {
   text: string;
   collapsedByDefault: boolean;
 }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createExampleStyles(theme), [theme]);
   const [open, setOpen] = useState(!props.collapsedByDefault);
 
   return (
     <Pressable
       onPress={() => setOpen((v) => !v)}
       hitSlop={8}
-      style={({ pressed }) => ({
-        paddingTop: 12,
-        opacity: pressed ? 0.85 : 1,
-      })}
+      style={({ pressed }) => [styles.examplePressable, { opacity: pressed ? 0.85 : 1 }]}
     >
-      <View style={{ alignItems: 'center', gap: 6 }}>
+      <View style={styles.exampleContent}>
         <Text
-          style={{
-            fontSize: 13,
-            lineHeight: 18,
-            fontWeight: '400',
-            color: t.colors.textMuted,
-            textAlign: 'center',
-            maxWidth: 320,
-          }}
+          style={styles.exampleText}
           numberOfLines={open ? 0 : 4}
         >
           {props.text}
@@ -477,4 +451,80 @@ function ExampleFooter(props: {
       </View>
     </Pressable>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerRightRow: {
+      justifyContent: 'flex-end',
+    },
+    headerIconButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    progressRow: {
+      marginBottom: theme.spacing.md,
+    },
+    progressText: {
+      color: theme.colors.textMuted,
+    },
+    progressActions: {
+      justifyContent: 'flex-end',
+    },
+    progressPill: {
+      alignSelf: 'center',
+    },
+    actionsSpacer: {
+      height: 10,
+    },
+    noteCard: {
+      marginTop: 12,
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: theme.colors.surface2,
+    },
+    noteRow: {
+      alignItems: 'flex-start',
+    },
+    noteIcon: {
+      marginTop: 2,
+    },
+    noteContent: {
+      flex: 1,
+      maxHeight: 140,
+    },
+    noteScrollContent: {
+      paddingRight: 4,
+    },
+    noteText: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '400' as const,
+      color: theme.colors.textMuted,
+      textAlign: 'left',
+    },
+    unflippedSpacer: {
+      height: 8,
+    },
+  });
+}
+
+function createExampleStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    examplePressable: {
+      paddingTop: 12,
+    },
+    exampleContent: {
+      alignItems: 'center',
+      gap: 6,
+    },
+    exampleText: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '400' as const,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      maxWidth: 320,
+    },
+  });
 }

@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { getAiApiKey } from '@/data/secureStore';
 import { usePrefsStore } from '@/stores/prefsStore';
@@ -14,7 +14,8 @@ import { ToggleRow } from '@/ui/components/ToggleRow';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export default function SettingsScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { prefs, patchPrefs } = usePrefsStore();
 
   const [apiKeySaved, setApiKeySaved] = useState(false);
@@ -33,20 +34,20 @@ export default function SettingsScreen() {
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: 'Settings' }} />
-      <View style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 20 }}>
-          <View style={{ gap: 20 }}>
-            <View style={{ gap: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text variant="h2" style={{ flex: 1 }}>
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.sectionStack}>
+            <View style={styles.cardStack}>
+              <View style={styles.sectionHeader}>
+                <Text variant="h2" style={styles.sectionTitle}>
                   AI Assist
                 </Text>
                 <Pressable
                   onPress={() => setAiInfoOpen(true)}
                   hitSlop={10}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                  style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.7 : 1 }]}
                 >
-                  <Ionicons name="information-circle-outline" size={18} color={t.colors.textMuted} />
+                  <Ionicons name="information-circle-outline" size={18} color={theme.colors.textMuted} />
                 </Pressable>
               </View>
 
@@ -67,12 +68,12 @@ export default function SettingsScreen() {
                 }}
               />
 
-              <View style={{ height: 10 }} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={styles.statusSpacer} />
+              <View style={styles.statusRow}>
                 <Ionicons
                   name={prefs.ai.enabled && apiKeySaved ? 'checkmark-circle' : 'alert-circle'}
                   size={18}
-                  color={prefs.ai.enabled && apiKeySaved ? t.colors.success : t.colors.textMuted}
+                  color={prefs.ai.enabled && apiKeySaved ? theme.colors.success : theme.colors.textMuted}
                 />
                 <Text variant="muted">
                   {prefs.ai.enabled ? (apiKeySaved ? 'Enabled' : 'Enabled (missing key)') : 'Disabled'} · Model{' '}
@@ -80,22 +81,19 @@ export default function SettingsScreen() {
                 </Text>
               </View>
 
-              <View style={{ height: 12 }} />
+              <View style={styles.actionSpacer} />
               <Button
                 title="Configure AI Assist"
                 variant="secondary"
                 onPress={() => router.push('/settings/ai')}
-                style={{ borderRadius: 999 }}
+                style={styles.configureButton}
               />
             </View>
           </View>
         </ScrollView>
 
-        <View style={{ paddingHorizontal: t.spacing.lg, paddingBottom: 10 }}>
-          <Text
-            variant="muted"
-            style={{ textAlign: 'center', fontSize: 12, opacity: 0.7 }}
-          >{`Version ${appVersion}`}</Text>
+        <View style={styles.versionWrap}>
+          <Text variant="muted" style={styles.versionText}>{`Version ${appVersion}`}</Text>
         </View>
       </View>
 
@@ -107,4 +105,57 @@ export default function SettingsScreen() {
       </InfoModal>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: theme.spacing.lg,
+      paddingBottom: 20,
+    },
+    sectionStack: {
+      gap: 20,
+    },
+    cardStack: {
+      gap: 10,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    sectionTitle: {
+      flex: 1,
+    },
+    iconButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    statusSpacer: {
+      height: 10,
+    },
+    statusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    actionSpacer: {
+      height: 12,
+    },
+    configureButton: {
+      borderRadius: 999,
+    },
+    versionWrap: {
+      paddingHorizontal: theme.spacing.lg,
+      paddingBottom: 10,
+    },
+    versionText: {
+      textAlign: 'center',
+      fontSize: 12,
+      opacity: 0.7,
+    },
+  });
 }

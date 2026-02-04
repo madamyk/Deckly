@@ -18,16 +18,16 @@ export function Surface({
   style,
   ...rest
 }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   return (
     <View
       {...rest}
       style={[
         {
-          backgroundColor: tone === 'muted' ? t.colors.surface2 : t.colors.surface,
+          backgroundColor: tone === 'muted' ? theme.colors.surface2 : theme.colors.surface,
           borderRadius: radius,
           borderWidth: border ? 1 : 0,
-          borderColor: t.colors.border,
+          borderColor: theme.colors.border,
           padding,
         },
         style,

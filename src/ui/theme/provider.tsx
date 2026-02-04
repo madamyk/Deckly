@@ -14,8 +14,7 @@ export function DecklyThemeProvider(props: {
 }
 
 export function useDecklyTheme(): DecklyTheme {
-  const t = React.useContext(ThemeContext);
-  if (!t) throw new Error('useDecklyTheme must be used within DecklyThemeProvider');
-  return t;
+  const theme = React.useContext(ThemeContext);
+  if (!theme) throw new Error('useDecklyTheme must be used within DecklyThemeProvider');
+  return theme;
 }
-

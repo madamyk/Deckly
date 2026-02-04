@@ -29,22 +29,22 @@ export function ToggleRow({
   activeBorderColor,
   inactiveBorderColor,
 }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
 
   return (
     <Row style={{ alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-      <Text style={{ fontWeight: '500', color: t.colors.textMuted }}>{label}</Text>
+      <Text style={{ fontWeight: '500', color: theme.colors.textMuted }}>{label}</Text>
       <View>
         {Platform.OS === 'ios' ? (
           <Switch
             value={value}
             onValueChange={onToggle}
             trackColor={{
-              false: inactiveBg ?? t.colors.surface2,
-              true: activeBg ?? t.colors.primaryGradientEnd,
+              false: inactiveBg ?? theme.colors.surface2,
+              true: activeBg ?? theme.colors.primaryGradientEnd,
             }}
             thumbColor={value ? '#FFFFFF' : '#F4F5F7'}
-            ios_backgroundColor={inactiveBg ?? t.colors.surface2}
+            ios_backgroundColor={inactiveBg ?? theme.colors.surface2}
           />
         ) : (
           <TogglePill

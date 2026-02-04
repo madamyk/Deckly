@@ -1,8 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Picker } from '@react-native-picker/picker';
 import { Stack, router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,6 +21,7 @@ import { Pill } from '@/ui/components/Pill';
 import { Screen } from '@/ui/components/Screen';
 import { Surface } from '@/ui/components/Surface';
 import { Text } from '@/ui/components/Text';
+import { TranslateTermModal } from '@/ui/components/TranslateTermModal';
 import { useKeyboardVisible } from '@/ui/hooks/useKeyboardVisible';
 import { resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
@@ -32,8 +32,9 @@ export function CardEditorScreen(props: {
   deckId: string;
   cardId?: string;
 }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const ai = usePrefsStore((s) => s.prefs.ai);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
   const keyboard = useAnimatedKeyboard();
@@ -78,45 +79,41 @@ export function CardEditorScreen(props: {
   }, [generating, progressT]);
 
   const progressThumbStyle = useAnimatedStyle(() => {
-    const w = progressTrackW.value;
-    const seg = Math.max(24, w * 0.35);
-    const x = (w + seg) * progressT.value - seg;
+    const trackWidth = progressTrackW.value;
+    const segmentWidth = Math.max(24, trackWidth * 0.35);
+    const translateX = (trackWidth + segmentWidth) * progressT.value - segmentWidth;
     return {
-      width: seg,
-      transform: [{ translateX: x }],
+      width: segmentWidth,
+      transform: [{ translateX }],
     };
   });
-  // const keyboardPaddingStyle = useAnimatedStyle(() => ({
-  //   paddingBottom: keyboard.height.value,
-  // }), [keyboard.height]);
-
   const keyboardAvoiderStyle = useAnimatedStyle(() => ({
     height: withTiming(keyboard.height.value / 2, { duration: 250 })
   }));
 
   const load = useCallback(async () => {
     if (props.mode !== 'edit' || !props.cardId) return;
-    const c = await cardsRepo.getCard(props.cardId);
-    setCard(c);
-    const f = c?.front ?? '';
-    const b = c?.back ?? '';
-    const e1 = c?.exampleL1 ?? '';
-    const e2 = c?.exampleL2 ?? '';
-    const en = c?.exampleNote ?? '';
-    setInitialFront(f);
-    setInitialBack(b);
-    setInitialExampleL1(e1);
-    setInitialExampleL2(e2);
-    setInitialExampleNote(en);
-    setInitialExampleSource(c?.exampleSource ?? null);
-    setInitialExampleGeneratedAt(c?.exampleGeneratedAt ?? null);
-    setFront(f);
-    setBack(b);
-    setExampleL1(e1);
-    setExampleL2(e2);
-    setExampleNote(en);
-    setExampleSource(c?.exampleSource ?? null);
-    setExampleGeneratedAt(c?.exampleGeneratedAt ?? null);
+    const cardRecord = await cardsRepo.getCard(props.cardId);
+    setCard(cardRecord);
+    const frontValue = cardRecord?.front ?? '';
+    const backValue = cardRecord?.back ?? '';
+    const exampleFrontValue = cardRecord?.exampleL1 ?? '';
+    const exampleBackValue = cardRecord?.exampleL2 ?? '';
+    const exampleNoteValue = cardRecord?.exampleNote ?? '';
+    setInitialFront(frontValue);
+    setInitialBack(backValue);
+    setInitialExampleL1(exampleFrontValue);
+    setInitialExampleL2(exampleBackValue);
+    setInitialExampleNote(exampleNoteValue);
+    setInitialExampleSource(cardRecord?.exampleSource ?? null);
+    setInitialExampleGeneratedAt(cardRecord?.exampleGeneratedAt ?? null);
+    setFront(frontValue);
+    setBack(backValue);
+    setExampleL1(exampleFrontValue);
+    setExampleL2(exampleBackValue);
+    setExampleNote(exampleNoteValue);
+    setExampleSource(cardRecord?.exampleSource ?? null);
+    setExampleGeneratedAt(cardRecord?.exampleGeneratedAt ?? null);
   }, [props.mode, props.cardId]);
 
   useEffect(() => {
@@ -125,8 +122,8 @@ export function CardEditorScreen(props: {
 
   useEffect(() => {
     (async () => {
-      const d = await getDeck(props.deckId);
-      setAccentColor(resolveDeckAccentColor(d?.accentColor) ?? null);
+      const deck = await getDeck(props.deckId);
+      setAccentColor(resolveDeckAccentColor(deck?.accentColor) ?? null);
       const langs = await deckAiRepo.getDeckLanguages(props.deckId);
       setDeckLanguages(langs);
     })();
@@ -134,8 +131,8 @@ export function CardEditorScreen(props: {
 
   useEffect(() => {
     (async () => {
-      const k = await getAiApiKey();
-      setAiKeyPresent(!!k);
+      const apiKey = await getAiApiKey();
+      setAiKeyPresent(!!apiKey);
     })();
   }, []);
 
@@ -152,8 +149,8 @@ export function CardEditorScreen(props: {
   const canSave = !saving && isDirty && front.trim().length > 0 && back.trim().length > 0;
   const hasExampleContent = !!(exampleL1.trim() || exampleL2.trim() || exampleNote.trim());
   const canGenerate = front.trim().length > 0 && back.trim().length > 0;
-  const optionalInputStyle = { backgroundColor: t.colors.surface };
-  const accentProgress = accentColor ?? t.colors.primary2;
+  const optionalInputStyle = styles.optionalInput;
+  const accentProgress = accentColor ?? theme.colors.primary2;
   const isBusy = generating || translating;
   const frontEmpty = front.trim().length === 0;
   const backEmpty = back.trim().length === 0;
@@ -162,29 +159,29 @@ export function CardEditorScreen(props: {
   const canTranslate = ai.enabled && aiKeyPresent && !isBusy;
 
   async function save() {
-    const f = front.trim();
-    const b = back.trim();
-    if (!f || !b) {
+    const frontText = front.trim();
+    const backText = back.trim();
+    if (!frontText || !backText) {
       Alert.alert('Deckly', 'Front and Back are required.');
       return;
     }
     setSaving(true);
     try {
-      const e1 = exampleL1.trim() ? exampleL1.trim() : null;
-      const e2 = exampleL2.trim() ? exampleL2.trim() : null;
-      const en = exampleNote.trim() ? exampleNote.trim() : null;
-      const hasAnyExample = !!(e1 || e2 || en);
+      const exampleFront = exampleL1.trim() ? exampleL1.trim() : null;
+      const exampleBack = exampleL2.trim() ? exampleL2.trim() : null;
+      const exampleNoteText = exampleNote.trim() ? exampleNote.trim() : null;
+      const hasAnyExample = !!(exampleFront || exampleBack || exampleNoteText);
       const source: ExampleSource | null = hasAnyExample ? (exampleSource ?? 'user') : null;
       const generatedAt = source === 'ai' ? exampleGeneratedAt ?? nowMs() : null;
 
       if (props.mode === 'create') {
         await cardsRepo.createCard({
           deckId: props.deckId,
-          front: f,
-          back: b,
-          exampleL1: e1,
-          exampleL2: e2,
-          exampleNote: en,
+          front: frontText,
+          back: backText,
+          exampleL1: exampleFront,
+          exampleL2: exampleBack,
+          exampleNote: exampleNoteText,
           exampleSource: source,
           exampleGeneratedAt: generatedAt,
         });
@@ -192,11 +189,11 @@ export function CardEditorScreen(props: {
       } else {
         if (!props.cardId) return;
         await cardsRepo.updateCard(props.cardId, {
-          front: f,
-          back: b,
-          exampleL1: e1,
-          exampleL2: e2,
-          exampleNote: en,
+          front: frontText,
+          back: backText,
+          exampleL1: exampleFront,
+          exampleL2: exampleBack,
+          exampleNote: exampleNoteText,
           exampleSource: source,
           exampleGeneratedAt: generatedAt,
         });
@@ -210,9 +207,9 @@ export function CardEditorScreen(props: {
   }
 
   async function generateConfirmed() {
-    const f = front.trim();
-    const b = back.trim();
-    if (!f || !b) {
+    const frontText = front.trim();
+    const backText = back.trim();
+    if (!frontText || !backText) {
       Alert.alert('Deckly', 'Fill in Front and Back first.');
       return;
     }
@@ -231,8 +228,8 @@ export function CardEditorScreen(props: {
     try {
       const { patch } = await generateExamplePair({
         deckId: props.deckId,
-        frontText: f,
-        backText: b,
+        frontText,
+        backText,
       });
       setExampleL1(patch.exampleL1 ?? '');
       setExampleL2(patch.exampleL2 ?? '');
@@ -249,11 +246,11 @@ export function CardEditorScreen(props: {
   function generate() {
     if (hasExampleContent) {
       Alert.alert(
-        props.mode === 'edit' ? 'Regenerate content?' : 'Generate content?',
+        'Regenerate content?',
         'This will overwrite the current examples and note for this card.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: props.mode === 'edit' ? 'Regenerate' : 'Generate', onPress: generateConfirmed },
+          { text: 'Regenerate', onPress: generateConfirmed },
         ],
       );
       return;
@@ -337,7 +334,7 @@ export function CardEditorScreen(props: {
         <Ionicons
           name="sparkles-outline"
           size={18}
-          color={canTranslate ? t.colors.text : t.colors.textMuted}
+          color={canTranslate ? theme.colors.text : theme.colors.textMuted}
         />
       </Pressable>
     );
@@ -370,7 +367,6 @@ export function CardEditorScreen(props: {
   }
 
   return (
-    // With a native Stack header, avoid top safe-area padding (it creates a "blank band" below the header).
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen
         options={{
@@ -388,13 +384,9 @@ export function CardEditorScreen(props: {
                 ]);
               }}
               hitSlop={10}
-              style={({ pressed }) => ({
-                paddingHorizontal: 8,
-                paddingVertical: 6,
-                opacity: pressed ? 0.6 : 1,
-              })}
+              style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.6 : 1 }]}
             >
-              <Ionicons name="chevron-back" size={22} color={t.colors.text} />
+              <Ionicons name="chevron-back" size={22} color={theme.colors.text} />
             </Pressable>
           ),
           headerRight: () => (
@@ -402,13 +394,12 @@ export function CardEditorScreen(props: {
               onPress={save}
               disabled={!canSave}
               hitSlop={10}
-              style={({ pressed }) => ({
-                paddingHorizontal: 6,
-                paddingVertical: 4,
-                opacity: !canSave ? 0.4 : pressed ? 0.6 : 1,
-              })}
+              style={({ pressed }) => [
+                styles.headerSaveButton,
+                { opacity: !canSave ? 0.4 : pressed ? 0.6 : 1 },
+              ]}
             >
-              <Text style={{ color: canSave ? '#FFFFFF' : t.colors.textMuted, fontWeight: '700' }}>
+              <Text style={[styles.headerSaveText, { color: canSave ? '#FFFFFF' : theme.colors.textMuted }]}>
                 {saving ? 'Saving...' : 'Save'}
               </Text>
             </Pressable>
@@ -417,13 +408,9 @@ export function CardEditorScreen(props: {
       />
 
       <Animated.ScrollView
-        // keyboardShouldPersistTaps="handled"
-        // keyboardDismissMode="on-drag"
-        // style={{ paddingBottom: 200 }}
-        contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: t.spacing.lg + insets.bottom, }}
+        contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: theme.spacing.lg + insets.bottom }}
       >
-
-        <Animated.View style={[{ gap: 14 }]}>
+        <Animated.View style={styles.content}>
           <Input
             label="Front"
             value={front}
@@ -441,19 +428,14 @@ export function CardEditorScreen(props: {
             editable={!isBusy}
           />
           <View style={{ gap: 8, marginTop: 6 }}>
-            <Text variant="label" style={{ color: t.colors.textMuted, opacity: 0.7 }}>
+            <Text variant="label" style={styles.optionalLabel}>
               Optional
             </Text>
             <Surface
               radius={18}
               tone="muted"
               border={false}
-              style={{
-                gap: 12,
-                paddingVertical: 16,
-                paddingHorizontal: t.spacing.lg,
-                marginHorizontal: -t.spacing.lg,
-              }}
+              style={styles.optionalSurface}
             >
               <Input
                 label="Example front"
@@ -496,25 +478,17 @@ export function CardEditorScreen(props: {
                 {generating ? (
                   <View style={{ gap: 10 }}>
                     <Text variant="muted">Generating content…</Text>
-                    <View style={{ borderRadius: 999, backgroundColor: t.colors.border, padding: 1 }}>
+                    <View style={styles.progressTrack}>
                       <View
-                        style={{
-                          height: 8,
-                          borderRadius: 999,
-                          backgroundColor: t.colors.surface2,
-                          overflow: 'hidden',
-                        }}
+                        style={styles.progressTrackInner}
                         onLayout={(e) => {
                           progressTrackW.value = e.nativeEvent.layout.width;
                         }}
                       >
                         <Animated.View
                           style={[
-                            {
-                              height: '100%',
-                              borderRadius: 999,
-                              backgroundColor: accentProgress,
-                            },
+                            styles.progressThumb,
+                            { backgroundColor: accentProgress },
                             progressThumbStyle,
                           ]}
                         />
@@ -523,22 +497,22 @@ export function CardEditorScreen(props: {
                   </View>
                 ) : (
                   <Button
-                    title={props.mode === 'edit' && hasExampleContent ? 'Regenerate content' : 'Generate content'}
+                    title={hasExampleContent ? 'Regenerate content' : 'Generate content'}
                     variant="secondary"
-                    left={<Ionicons name="sparkles-outline" size={18} color={t.colors.text} />}
+                    left={<Ionicons name="sparkles-outline" size={18} color={theme.colors.text} />}
                     onPress={generate}
                     disabled={!ai.enabled || !aiKeyPresent || !canGenerate || isBusy}
                   />
                 )}
                 {genError ? (
                   <View style={{ gap: 8 }}>
-                    <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{genError}</Text>
+                    <Text style={styles.errorText}>{genError}</Text>
                     <Pressable
                       onPress={() => router.push('/settings/ai-debug')}
                       style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
                       hitSlop={8}
                     >
-                      <Text variant="muted" style={{ textDecorationLine: 'underline', }}>
+                      <Text variant="muted" style={styles.debugLink}>
                         View AI debug logs
                       </Text>
                     </Pressable>
@@ -546,14 +520,14 @@ export function CardEditorScreen(props: {
                 ) : null}
                 {!ai.enabled ? (
                   <Text
-                    style={{ color: t.colors.textMuted, fontWeight: '700' }}
+                    style={styles.helpText}
                     onPress={() => router.push('/settings/ai')}
                   >
                     AI Assist is off. Enable it in Settings.
                   </Text>
                 ) : !aiKeyPresent ? (
                   <Text
-                    style={{ color: t.colors.textMuted, fontWeight: '700' }}
+                    style={styles.helpText}
                     onPress={() => router.push('/settings/ai')}
                   >
                     Add an API key in Settings to enable generation.
@@ -563,20 +537,9 @@ export function CardEditorScreen(props: {
             </Surface>
           </View>
           {card && !keyboardVisible ? (
-            <View
-              style={{
-                marginTop: 10,
-                gap: 6,
-              }}
-            >
+            <View style={styles.scheduling}>
               <Text variant="label">Scheduling</Text>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                }}
-              >
+              <View style={styles.stateRow}>
                 <Text variant="muted">State:</Text>
                 <Pill label={cardStateLabel(card.state)} tone={cardStateTone(card.state)} />
               </View>
@@ -589,7 +552,12 @@ export function CardEditorScreen(props: {
           ) : null}
 
           <View style={{ marginTop: 10 }}>
-            <Button title="Flip card" variant="secondary" onPress={reverseFields} />
+            <Button
+              title="Flip card"
+              variant="secondary"
+              onPress={reverseFields}
+              disabled={generating || translating}
+            />
           </View>
 
           {props.mode === 'edit' && !keyboardVisible ? (
@@ -602,74 +570,126 @@ export function CardEditorScreen(props: {
       </Animated.ScrollView>
       <Animated.View style={keyboardAvoiderStyle} />
 
-      {/* <Animated.View style={keyboardAvoiderStyle} /> */}
-
-      <Modal
+      <TranslateTermModal
         visible={translatePickerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={closeTranslatePicker}
-      >
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
-          <Pressable
-            onPress={closeTranslatePicker}
-            style={{
-              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
-              backgroundColor: 'rgba(0,0,0,0.55)',
-            }}
-          />
-          <Surface radius={22} style={{ gap: 12, padding: 16 }}>
-            <Text variant="h2">Translate into</Text>
-            <Text variant="muted">
-              {pendingTranslateSide
-                ? `We'll translate the ${pendingTranslateSide === 'front' ? 'back' : 'front'} into the selected language and fill the ${pendingTranslateSide}.`
-                : `We'll translate the other side into the selected language and fill the empty field.`}
-            </Text>
-            <Picker
-              selectedValue={translateTargetCode}
-              onValueChange={(v) => setTranslateTargetCode(String(v))}
-            >
-              {EXTRA_LANGUAGES.map((lang) => (
-                <Picker.Item
-                  key={lang.code}
-                  label={`${lang.emoji} ${lang.label}`}
-                  value={lang.code}
-                />
-              ))}
-            </Picker>
-            <View style={{ gap: 10 }}>
-              <Button
-                title="Translate"
-                onPress={() => {
-                  if (!pendingTranslateSide) {
-                    closeTranslatePicker();
-                    return;
-                  }
-                  const opt = getLanguageOption(translateTargetCode);
-                  const targetLanguage = opt ? `${opt.label} (${opt.code})` : translateTargetCode;
-                  closeTranslatePicker();
-                  runTranslate({ side: pendingTranslateSide, targetLanguage, sourceLanguage: null });
-                }}
-                disabled={!pendingTranslateSide}
-              />
-              <Button title="Cancel" variant="secondary" onPress={closeTranslatePicker} />
-            </View>
-          </Surface>
-        </View>
-      </Modal>
-      {/* </KeyboardAvoidingView> */}
+        pendingSide={pendingTranslateSide}
+        selectedCode={translateTargetCode}
+        languageOptions={EXTRA_LANGUAGES}
+        onChangeCode={setTranslateTargetCode}
+        onClose={closeTranslatePicker}
+        onTranslate={() => {
+          if (!pendingTranslateSide) {
+            closeTranslatePicker();
+            return;
+          }
+          const option = getLanguageOption(translateTargetCode);
+          const targetLanguage = option ? `${option.label} (${option.code})` : translateTargetCode;
+          closeTranslatePicker();
+          runTranslate({ side: pendingTranslateSide, targetLanguage, sourceLanguage: null });
+        }}
+      />
     </Screen>
   );
 }
 
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    headerSaveButton: {
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+    },
+    headerSaveText: {
+      fontWeight: '700',
+    },
+    content: {
+      gap: 14,
+    },
+    optionalLabel: {
+      color: theme.colors.textMuted,
+      opacity: 0.7,
+    },
+    optionalSurface: {
+      gap: 12,
+      paddingVertical: 16,
+      paddingHorizontal: theme.spacing.lg,
+      marginHorizontal: -theme.spacing.lg,
+    },
+    optionalInput: {
+      backgroundColor: theme.colors.surface,
+    },
+    progressTrack: {
+      borderRadius: 999,
+      backgroundColor: theme.colors.border,
+      padding: 1,
+    },
+    progressTrackInner: {
+      height: 8,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface2,
+      overflow: 'hidden',
+    },
+    progressThumb: {
+      height: '100%',
+      borderRadius: 999,
+    },
+    errorText: {
+      color: theme.colors.danger,
+      fontWeight: '700',
+    },
+    debugLink: {
+      textDecorationLine: 'underline',
+    },
+    helpText: {
+      color: theme.colors.textMuted,
+      fontWeight: '700',
+    },
+    scheduling: {
+      marginTop: 10,
+      gap: 6,
+    },
+    stateRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+  });
+}
+
+function createStatStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    statRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    statLabel: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '600',
+    },
+    statValue: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+  });
+}
+
 function StatRow(props: { label: string; children: React.ReactNode }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStatStyles(theme), [theme]);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-      <Text variant="muted" style={{ fontSize: 13, lineHeight: 18, fontWeight: '600' }}>
+    <View style={styles.statRow}>
+      <Text variant="muted" style={styles.statLabel}>
         {props.label}:
       </Text>
-      <Text style={{ fontSize: 13, lineHeight: 18, fontWeight: '700', color: t.colors.text }}>
+      <Text style={styles.statValue}>
         {props.children}
       </Text>
     </View>

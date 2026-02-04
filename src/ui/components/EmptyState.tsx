@@ -16,7 +16,7 @@ export function EmptyState(props: {
   messageStyle?: TextStyle;
   style?: ViewStyle;
 }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const gap = props.gap ?? 12;
   return (
     <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', gap }, props.style]}>
@@ -28,13 +28,13 @@ export function EmptyState(props: {
             borderRadius: 999,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: t.colors.surface2,
+            backgroundColor: theme.colors.surface2,
             borderWidth: 1,
-            borderColor: t.colors.border,
+            borderColor: theme.colors.border,
             opacity: 0.9,
           }}
         >
-          <Ionicons name={props.iconName} size={34} color={t.colors.textMuted} />
+          <Ionicons name={props.iconName} size={34} color={theme.colors.textMuted} />
         </View>
       ) : null}
       <Text variant="h2" style={{ textAlign: 'center' }}>

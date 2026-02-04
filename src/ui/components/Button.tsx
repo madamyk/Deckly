@@ -24,27 +24,30 @@ type Props = PressableProps & {
 };
 
 export function Button({ title, variant = 'primary', left, ...rest }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   const colors = useMemo(() => {
-    if (variant === 'primary') return { bg: t.colors.primary, fg: '#FFFFFF' };
-    if (variant === 'primarySoft') return { bg: t.colors.surface2, fg: t.colors.primary };
-    if (variant === 'warning') return { bg: t.colors.surface2, fg: t.colors.warning };
-    if (variant === 'success') return { bg: t.colors.surface2, fg: t.colors.success };
-    if (variant === 'danger') return { bg: t.colors.danger, fg: '#FFFFFF' };
-    if (variant === 'dangerSoft') return { bg: t.colors.surface2, fg: t.colors.danger };
-    if (variant === 'dangerGhost') return { bg: 'transparent', fg: t.colors.danger };
-    if (variant === 'secondary') return { bg: t.colors.surface2, fg: t.colors.text };
-    return { bg: 'transparent', fg: t.colors.text };
-  }, [t, variant]);
+    if (variant === 'primary') return { bg: theme.colors.primary, fg: '#FFFFFF' };
+    if (variant === 'primarySoft') return { bg: theme.colors.surface2, fg: theme.colors.primary };
+    if (variant === 'warning') return { bg: theme.colors.surface2, fg: theme.colors.warning };
+    if (variant === 'success') return { bg: theme.colors.surface2, fg: theme.colors.success };
+    if (variant === 'danger') return { bg: theme.colors.danger, fg: '#FFFFFF' };
+    if (variant === 'dangerSoft') return { bg: theme.colors.surface2, fg: theme.colors.danger };
+    if (variant === 'dangerGhost') return { bg: 'transparent', fg: theme.colors.danger };
+    if (variant === 'secondary') return { bg: theme.colors.surface2, fg: theme.colors.text };
+    return { bg: 'transparent', fg: theme.colors.text };
+  }, [theme, variant]);
 
   const disabled = !!rest.disabled;
   const titleWeight = variant === 'primary' || variant === 'danger' ? '800' : '700';
   const showGradient = variant === 'primary';
   const gradientColors = useMemo(
-    () => [t.colors.primaryGradientStart, t.colors.primaryGradientEnd],
-    [t.colors.primaryGradientStart, t.colors.primaryGradientEnd],
+    () => [theme.colors.primaryGradientStart, theme.colors.primaryGradientEnd] as const,
+    [theme.colors.primaryGradientStart, theme.colors.primaryGradientEnd],
   );
-  const flatStyle = useMemo(() => StyleSheet.flatten(rest.style), [rest.style]);
+  const flatStyle = useMemo(() => {
+    if (typeof rest.style === 'function') return undefined;
+    return StyleSheet.flatten(rest.style);
+  }, [rest.style]);
   const radius =
     typeof flatStyle?.borderRadius === 'number' ? flatStyle.borderRadius : styles.base.borderRadius;
 
@@ -60,7 +63,7 @@ export function Button({ title, variant = 'primary', left, ...rest }: Props) {
         {
           backgroundColor: showGradient ? 'transparent' : colors.bg,
           // Ghost buttons get a subtle border. Destructive actions should be red text only.
-          borderColor: variant === 'ghost' ? t.colors.border : 'transparent',
+          borderColor: variant === 'ghost' ? theme.colors.border : 'transparent',
           borderWidth: showGradient ? 0 : 1,
           opacity: disabled ? 0.5 : pressed ? 0.88 : 1,
         },

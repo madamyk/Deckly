@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { format } from 'date-fns';
 
 import { clearAiDebugEntries, listAiDebugEntries, type AiDebugEntry } from '@/ai/debugLog';
@@ -30,7 +30,8 @@ function formatDuration(ms?: number): string {
 }
 
 export default function AiDebugScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [items, setItems] = useState<AiDebugEntry[]>([]);
   const [selected, setSelected] = useState<AiDebugEntry | null>(null);
 
@@ -59,40 +60,37 @@ export default function AiDebugScreen() {
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: 'AI Debug' }} />
-      <ScrollView contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 30 }}>
-        <View style={{ gap: 10 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.headerStack}>
           <Text variant="h2">Debug logs</Text>
           <Text variant="muted">
             When AI generation fails, Deckly stores a short prompt/response snapshot locally to help
             diagnose issues. No API key is stored here.
           </Text>
-          <Row style={{ justifyContent: 'flex-end' }}>
+          <Row style={styles.headerActions}>
             <Button title="Refresh" variant="secondary" onPress={load} />
             <Button title="Clear" variant="dangerGhost" onPress={clearAll} />
           </Row>
         </View>
 
-        <View style={{ height: 14 }} />
+        <View style={styles.sectionSpacer} />
 
         {items.length === 0 ? (
           <Text variant="muted">No logs yet.</Text>
         ) : (
-          <Surface radius={22} style={{ overflow: 'hidden' }}>
+          <Surface radius={22} style={styles.logSurface}>
             {items.map((it, idx) => (
               <Pressable
                 key={it.id}
                 onPress={() => setSelected(it)}
-                style={({ pressed }) => ({
-                  padding: 14,
-                  opacity: pressed ? 0.85 : 1,
-                })}
+                style={({ pressed }) => [styles.logItem, { opacity: pressed ? 0.85 : 1 }]}
               >
                 {idx > 0 ? (
-                  <View style={{ height: 1, backgroundColor: t.colors.border, marginBottom: 14 }} />
+                  <View style={styles.logDivider} />
                 ) : null}
                 <Row align="flex-start">
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Text style={{ fontWeight: '900' }} numberOfLines={1}>
+                  <View style={styles.logContent}>
+                    <Text style={styles.logTitle} numberOfLines={1}>
                       {it.success
                         ? `slow response · ${formatDuration(it.durationMs)}`
                         : `${it.errorCode ?? 'error'}${it.status ? ` (${it.status})` : ''}`}
@@ -115,7 +113,7 @@ export default function AiDebugScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
                 </Row>
               </Pressable>
             ))}
@@ -129,20 +127,17 @@ export default function AiDebugScreen() {
         animationType="fade"
         onRequestClose={() => setSelected(null)}
       >
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
+        <View style={styles.modalRoot}>
           <Pressable
             onPress={() => setSelected(null)}
-            style={{
-              ...({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const),
-              backgroundColor: 'rgba(0,0,0,0.55)',
-            }}
+            style={styles.modalBackdrop}
           />
           {selected ? (
-            <Surface radius={22} style={{ maxHeight: '80%', gap: 10, padding: 16 }}>
+            <Surface radius={22} style={styles.modalCard}>
               <Row>
                 <Text variant="h2">Failure details</Text>
                 <Pressable onPress={() => setSelected(null)} hitSlop={10}>
-                  <Ionicons name="close" size={20} color={t.colors.textMuted} />
+                  <Ionicons name="close" size={20} color={theme.colors.textMuted} />
                 </Pressable>
               </Row>
 
@@ -151,7 +146,7 @@ export default function AiDebugScreen() {
                   <Text variant="muted" selectable>
                     {selected.errorMessage ?? '—'}
                   </Text>
-                  <View style={{ height: 1, backgroundColor: t.colors.border }} />
+                  <View style={styles.modalDivider} />
                 </>
               ) : null}
 
@@ -163,14 +158,14 @@ export default function AiDebugScreen() {
               </Text>
 
               <Text variant="label">Prompt</Text>
-              <ScrollView style={{ maxHeight: 180 }}>
+              <ScrollView style={styles.promptScroll}>
                 <Text variant="muted" selectable>
                   {selected.prompt ?? '—'}
                 </Text>
               </ScrollView>
 
               <Text variant="label">Response</Text>
-              <ScrollView style={{ maxHeight: 220 }}>
+              <ScrollView style={styles.responseScroll}>
                 <Text variant="muted" selectable>
                   {selected.responseText ?? '—'}
                 </Text>
@@ -183,4 +178,64 @@ export default function AiDebugScreen() {
       </Modal>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    scrollContent: {
+      padding: theme.spacing.lg,
+      paddingBottom: 30,
+    },
+    headerStack: {
+      gap: 10,
+    },
+    headerActions: {
+      justifyContent: 'flex-end',
+    },
+    sectionSpacer: {
+      height: 14,
+    },
+    logSurface: {
+      overflow: 'hidden',
+    },
+    logItem: {
+      padding: 14,
+    },
+    logDivider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginBottom: 14,
+    },
+    logContent: {
+      flex: 1,
+      gap: 6,
+    },
+    logTitle: {
+      fontWeight: '900' as const,
+    },
+    modalRoot: {
+      flex: 1,
+      padding: 20,
+      justifyContent: 'center',
+    },
+    modalBackdrop: {
+      ...(StyleSheet.absoluteFillObject as object),
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    modalCard: {
+      maxHeight: '80%',
+      gap: 10,
+      padding: 16,
+    },
+    modalDivider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+    promptScroll: {
+      maxHeight: 180,
+    },
+    responseScroll: {
+      maxHeight: 220,
+    },
+  });
 }

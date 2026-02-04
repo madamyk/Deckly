@@ -12,7 +12,7 @@ const LEVELS: { key: AiExampleLevel; label: string }[] = [
 ];
 
 export function LevelPicker(props: { value: AiExampleLevel; onChange: (v: AiExampleLevel) => void }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
       {LEVELS.map((lvl) => {
@@ -26,8 +26,8 @@ export function LevelPicker(props: { value: AiExampleLevel; onChange: (v: AiExam
               paddingVertical: 8,
               borderRadius: 999,
               borderWidth: 1,
-              borderColor: selected ? t.colors.primary2 : t.colors.border,
-              backgroundColor: selected ? t.colors.surface2 : 'transparent',
+              borderColor: selected ? theme.colors.primary2 : theme.colors.border,
+              backgroundColor: selected ? theme.colors.surface2 : 'transparent',
               opacity: pressed ? 0.85 : 1,
             })}
           >
@@ -35,7 +35,7 @@ export function LevelPicker(props: { value: AiExampleLevel; onChange: (v: AiExam
               style={{
                 fontSize: 12,
                 fontWeight: selected ? '800' : '600',
-                color: selected ? t.colors.text : t.colors.textMuted,
+                color: selected ? theme.colors.text : theme.colors.textMuted,
               }}
             >
               {lvl.label}

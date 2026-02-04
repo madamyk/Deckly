@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { getSecondaryLanguage, setSecondaryLanguage } from '@/data/repositories/deckPrefsRepo';
 import { EXTRA_LANGUAGES } from '@/domain/languages';
@@ -10,7 +10,8 @@ import { Text } from '@/ui/components/Text';
 import { useDecklyTheme } from '@/ui/theme/provider';
 
 export default function ExtraLanguageScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
   const [value, setValue] = useState<string | null>(null);
 
@@ -32,23 +33,17 @@ export default function ExtraLanguageScreen() {
   return (
     <Screen padded={false} edges={['left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: 'Extra language' }} />
-      <ScrollView contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 24 }}>
-        <View style={{ gap: 12 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.list}>
           <Pressable
             onPress={() => select(null)}
-            style={({ pressed }) => ({
-              paddingVertical: 12,
-              opacity: pressed ? 0.7 : 1,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            })}
+            style={({ pressed }) => [styles.optionRow, { opacity: pressed ? 0.7 : 1 }]}
           >
             <Text style={{ fontWeight: value ? '600' : '800' }}>None</Text>
-            {!value ? <Ionicons name="checkmark" size={18} color={t.colors.primary2} /> : null}
+            {!value ? <Ionicons name="checkmark" size={18} color={theme.colors.primary2} /> : null}
           </Pressable>
 
-          <View style={{ height: 1, backgroundColor: t.colors.border }} />
+          <View style={styles.divider} />
 
           {EXTRA_LANGUAGES.map((l) => {
             const selected = value === l.code;
@@ -56,19 +51,13 @@ export default function ExtraLanguageScreen() {
               <Pressable
                 key={l.code}
                 onPress={() => select(l.code)}
-                style={({ pressed }) => ({
-                  paddingVertical: 12,
-                  opacity: pressed ? 0.7 : 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                })}
+                style={({ pressed }) => [styles.optionRow, { opacity: pressed ? 0.7 : 1 }]}
               >
                 <Text style={{ fontWeight: selected ? '800' : '600' }}>
                   {l.emoji} {l.label}
                 </Text>
                 {selected ? (
-                  <Ionicons name="checkmark" size={18} color={t.colors.primary2} />
+                  <Ionicons name="checkmark" size={18} color={theme.colors.primary2} />
                 ) : null}
               </Pressable>
             );
@@ -77,4 +66,26 @@ export default function ExtraLanguageScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    scrollContent: {
+      padding: theme.spacing.lg,
+      paddingBottom: 24,
+    },
+    list: {
+      gap: 12,
+    },
+    optionRow: {
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    divider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+  });
 }

@@ -25,11 +25,12 @@ import { useDecklyTheme } from '@/ui/theme/provider';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function DeckSettingsScreen(props: { deckId: string }) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const { updateDeck, deleteDeck } = useDecksStore();
 
@@ -48,11 +49,11 @@ export function DeckSettingsScreen(props: { deckId: string }) {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const d = await getDeck(props.deckId);
-    setDeck(d);
-    if (d) {
-      setName(d.name);
-      setAccentKey(d.accentColor);
+    const deckRecord = await getDeck(props.deckId);
+    setDeck(deckRecord);
+    if (deckRecord) {
+      setName(deckRecord.name);
+      setAccentKey(deckRecord.accentColor);
     }
     const secondary = await getSecondaryLanguage(props.deckId);
     setSecondaryLanguageState(secondary);
@@ -140,24 +141,20 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     ]);
   }
 
-  const headerLeft = useMemo(
-    () => () => (
+  const HeaderLeft = useCallback(
+    () => (
       <Pressable
         hitSlop={10}
         onPress={() => router.back()}
-        style={({ pressed }) => ({
-          paddingHorizontal: 8,
-          paddingVertical: 6,
-          opacity: pressed ? 0.6 : 1,
-        })}
+        style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.6 : 1 }]}
       >
-        <Ionicons name="close" size={22} color={t.colors.text} />
+        <Ionicons name="close" size={22} color={theme.colors.text} />
       </Pressable>
     ),
-    [t.colors.text],
+    [styles.headerButton, theme.colors.text],
   );
 
-  const previewColor = resolveDeckAccentColor(accentKey) ?? t.colors.primary;
+  const previewColor = resolveDeckAccentColor(accentKey) ?? theme.colors.primary;
   const secondaryOption = getLanguageOption(secondaryLanguage);
   const extraLabel = secondaryOption
     ? `${secondaryOption.emoji} ${secondaryOption.label}`
@@ -168,7 +165,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       <Stack.Screen
         options={{
           title: 'Deck settings',
-          headerLeft,
+          headerLeft: HeaderLeft,
         }}
       />
 
@@ -179,7 +176,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
         >
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: t.spacing.lg, paddingBottom: 140 }}
+            contentContainerStyle={styles.contentContainer}
           >
             {!deck ? (
               <Text variant="muted">Deck not found.</Text>
@@ -199,44 +196,30 @@ export function DeckSettingsScreen(props: { deckId: string }) {
 
                 <View style={{ gap: 10 }}>
                   <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
+                    style={styles.accentHeader}
                   >
                     <Text variant="label">Accent</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 999,
-                          backgroundColor: previewColor,
-                        }}
-                      />
+                    <View style={styles.accentPreviewRow}>
+                      <View style={[styles.accentDot, { backgroundColor: previewColor }]} />
                       <Text variant="muted">Preview</Text>
                     </View>
                   </View>
 
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 8 }}>
+                  <View style={styles.accentOptions}>
                     {DECK_ACCENTS.map((a) => {
                       const selected = accentKey === a.key;
                       return (
                         <Pressable
                           key={a.key}
                           onPress={() => setAccentKey(a.key)}
-                          style={({ pressed }) => ({
-                            width: 36,
-                            height: 36,
-                            borderRadius: 999,
-                            borderWidth: 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: a.color,
-                            borderColor: selected ? '#fff' : 'rgba(255,255,255,0.35)',
-                            opacity: pressed ? 0.85 : 1,
-                          })}
+                          style={({ pressed }) => [
+                            styles.accentOption,
+                            {
+                              backgroundColor: a.color,
+                              borderColor: selected ? '#fff' : 'rgba(255,255,255,0.35)',
+                              opacity: pressed ? 0.85 : 1,
+                            },
+                          ]}
                         >
                           {selected ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}
                         </Pressable>
@@ -259,14 +242,14 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                       <Text variant="label">Extra language</Text>
                       <Text variant="muted">{extraLabel}</Text>
                     </View>
-                    <Ionicons name="chevron-down" size={18} color={t.colors.textMuted} />
+                    <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
                   </Row>
                 </Pressable>
 
                 <View style={{ gap: 6 }}>
                   <Row style={{ alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                      <Text style={{ fontWeight: '500', color: t.colors.textMuted }}>
+                      <Text style={{ fontWeight: '500', color: theme.colors.textMuted }}>
                         Switch card sides
                       </Text>
                       <Pressable
@@ -274,7 +257,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                         hitSlop={10}
                         style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
                       >
-                        <Ionicons name="information-circle-outline" size={16} color={t.colors.textMuted} />
+                        <Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} />
                       </Pressable>
                     </View>
                     <View>
@@ -283,11 +266,11 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                           value={studyReversed}
                           onValueChange={setStudyReversedState}
                           trackColor={{
-                            false: t.colors.surface2,
-                            true: t.colors.primaryGradientEnd,
+                            false: theme.colors.surface2,
+                            true: theme.colors.primaryGradientEnd,
                           }}
                           thumbColor={studyReversed ? '#FFFFFF' : '#F4F5F7'}
-                          ios_backgroundColor={t.colors.surface2}
+                          ios_backgroundColor={theme.colors.surface2}
                         />
                       ) : (
                         <TogglePill value={studyReversed} onToggle={setStudyReversedState} />
@@ -311,7 +294,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
         </KeyboardAvoidingView>
 
         {deck ? (
-          <View style={{ paddingHorizontal: t.spacing.lg, paddingBottom: 10 + insets.bottom }}>
+          <View style={[styles.footer, { paddingBottom: 10 + insets.bottom }]}>
             <View style={{ gap: 10 }}>
               <Button
                 title={saving ? 'Saving...' : 'Save changes'}
@@ -334,4 +317,49 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       </InfoModal>
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    contentContainer: {
+      padding: theme.spacing.lg,
+      paddingBottom: 140,
+    },
+    accentHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    accentPreviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    accentDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+    },
+    accentOptions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      paddingTop: 8,
+    },
+    accentOption: {
+      width: 36,
+      height: 36,
+      borderRadius: 999,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    footer: {
+      paddingHorizontal: theme.spacing.lg,
+    },
+  });
 }

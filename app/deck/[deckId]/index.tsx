@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionSheetIOS, Alert, FlatList, Platform, Pressable, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActionSheetIOS, Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
@@ -21,7 +21,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { formatDueRelative, nowMs } from '@/utils/time';
 
 export default function DeckScreen() {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const { deckId } = useLocalSearchParams<{ deckId: string }>();
 
@@ -117,45 +118,41 @@ export default function DeckScreen() {
     }, [deckId]),
   );
 
-  const headerRight = useMemo(
-    () => () => (
-      <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+  const HeaderRight = useCallback(
+    () => (
+      <Row gap={8} style={styles.headerActionRow}>
         <Pressable
           hitSlop={10}
           onPress={openAddMenu}
-          style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+          style={styles.headerIconButton}
         >
-          <Ionicons name="add" size={24} color={t.colors.text} />
+          <Ionicons name="add" size={24} color={theme.colors.text} />
         </Pressable>
         <Pressable
           hitSlop={10}
           onPress={() => {
             router.push({ pathname: '/deck/[deckId]/settings', params: { deckId } });
           }}
-          style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+          style={styles.headerIconButton}
         >
-          <Ionicons name="settings-outline" size={22} color={t.colors.text} />
+          <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
         </Pressable>
       </Row>
     ),
-    [openAddMenu, t.colors.text],
+    [deckId, openAddMenu, theme.colors.text, styles.headerActionRow, styles.headerIconButton],
   );
 
-  const headerLeft = useMemo(
-    () => () => (
+  const HeaderLeft = useCallback(
+    () => (
       <Pressable
         hitSlop={10}
         onPress={() => router.back()}
-        style={({ pressed }) => ({
-          paddingHorizontal: 8,
-          paddingVertical: 6,
-          opacity: pressed ? 0.6 : 1,
-        })}
+        style={({ pressed }) => [styles.headerBackButton, { opacity: pressed ? 0.6 : 1 }]}
       >
-        <Ionicons name="chevron-back" size={24} color={t.colors.text} />
+        <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
       </Pressable>
     ),
-    [t.colors.text],
+    [theme.colors.text, styles.headerBackButton],
   );
 
   const dueCount = stats?.due ?? 0;
@@ -163,14 +160,14 @@ export default function DeckScreen() {
   const hasCards = totalCount > 0;
   // Room for the floating CTA + home indicator, without an excessive blank tail.
   const listBottomPad = insets.bottom + 76;
-  const accent = resolveDeckAccentColor(deck?.accentColor) ?? t.colors.primary;
-  const accentGradient = getDeckAccentGradient(accent, t.scheme);
+  const accent = resolveDeckAccentColor(deck?.accentColor) ?? theme.colors.primary;
+  const accentGradient = getDeckAccentGradient(accent, theme.scheme);
 
   if (!deck) {
     return (
       <Screen padded={false} edges={['left', 'right']}>
         <Stack.Screen options={{ title: 'Deck' }} />
-        <View style={{ flex: 1, padding: t.spacing.lg }}>
+        <View style={styles.missingWrap}>
           <EmptyState title="Deck not found" message="It may have been deleted." />
         </View>
       </Screen>
@@ -179,22 +176,20 @@ export default function DeckScreen() {
 
   return (
     <Screen padded={false} edges={['left', 'right']}>
-      <Stack.Screen options={{ title: deck.name, headerLeft, headerRight }} />
+      <Stack.Screen options={{ title: deck.name, headerLeft: HeaderLeft, headerRight: HeaderRight }} />
 
       <View
-        style={{
-          paddingHorizontal: t.spacing.lg,
-          // The native stack header already handles safe area; keep only a small gutter.
-          paddingTop: 12,
-          paddingBottom: hasCards ? 8 : t.spacing.lg,
-        }}
+        style={[
+          styles.headerSummary,
+          { paddingBottom: hasCards ? 8 : theme.spacing.lg },
+        ]}
       >
         {hasCards ? (
-          <Row style={{ alignItems: 'center' }}>
-            <Text variant="mono" style={{ color: t.colors.textMuted }}>
+          <Row style={styles.headerSummaryRow}>
+            <Text variant="mono" style={styles.headerSummaryText}>
               {totalCount} cards
             </Text>
-            <Text variant="mono" style={{ color: t.colors.textMuted }}>
+            <Text variant="mono" style={styles.headerSummaryText}>
               {dueCount} due now
             </Text>
           </Row>
@@ -207,9 +202,9 @@ export default function DeckScreen() {
             data={cards}
             keyExtractor={(c) => c.id}
             // Indicator on the screen edge, content padded.
-            style={{ flex: 1 }}
+            style={styles.list}
             contentContainerStyle={{
-              paddingHorizontal: t.spacing.lg,
+              paddingHorizontal: theme.spacing.lg,
               // Keep the last item visible above the floating CTA + home indicator.
               paddingBottom: listBottomPad,
             }}
@@ -234,12 +229,12 @@ export default function DeckScreen() {
                     },
                   ]);
                 }}
-                style={{ marginBottom: 12 }}
+                style={styles.cardPressable}
               >
                 <Card>
-                  <View style={{ gap: 6 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                      <View style={{ flex: 1, paddingRight: 10 }}>
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardHeaderRow}>
+                      <View style={styles.cardHeaderText}>
                         <Text variant="h2" numberOfLines={1}>
                           {item.front}
                         </Text>
@@ -247,25 +242,19 @@ export default function DeckScreen() {
                       <Pill
                         label={cardStateLabel(item.state)}
                         tone={cardStateTone(item.state)}
-                        style={{ alignSelf: 'flex-start' }}
+                        style={styles.cardPill}
                       />
                     </View>
 
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-                      <View style={{ flex: 1, paddingRight: 10 }}>
+                    <View style={styles.cardFooterRow}>
+                      <View style={styles.cardFooterText}>
                         <Text variant="muted" numberOfLines={2}>
                           {item.back}
                         </Text>
                       </View>
                       <Text
                         numberOfLines={1}
-                        style={{
-                          color: t.colors.textMuted,
-                          fontSize: 12,
-                          lineHeight: 22,
-                          fontWeight: '500',
-                          textAlign: 'right',
-                        }}
+                        style={styles.cardDueText}
                       >
                         {formatDueRelative(item.dueAt, nowMs())}
                       </Text>
@@ -277,13 +266,7 @@ export default function DeckScreen() {
           />
         </>
       ) : (
-        <View
-          style={{
-            flex: 1,
-            paddingHorizontal: t.spacing.lg,
-            paddingBottom: t.spacing.lg + insets.bottom,
-          }}
-        >
+        <View style={[styles.emptyWrap, { paddingBottom: theme.spacing.lg + insets.bottom }]}>
           <EmptyState
             title="This deck is empty"
             message="Add your first cards or import a CSV to get started."
@@ -298,77 +281,30 @@ export default function DeckScreen() {
       {hasCards ? (
         <View
           pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            paddingHorizontal: t.spacing.lg,
-            paddingTop: 10,
-            paddingBottom: 10 + insets.bottom,
-          }}
+          style={[styles.reviewCtaWrap, { paddingBottom: 10 + insets.bottom }]}
         >
           {dueCount > 0 ? (
             <Pressable
               onPress={() =>
                 router.push({ pathname: '/deck/[deckId]/review', params: { deckId } })
               }
-              style={({ pressed }) => [{ alignSelf: 'center', opacity: pressed ? 0.9 : 1 }]}
+              style={({ pressed }) => [styles.reviewCtaPressable, { opacity: pressed ? 0.9 : 1 }]}
             >
               <LinearGradient
                 colors={accentGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{
-                  borderRadius: 999,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  shadowColor: t.colors.shadow,
-                  shadowOpacity: 0.22,
-                  shadowRadius: 18,
-                  shadowOffset: { width: 0, height: 12 },
-                  elevation: 6,
-                }}
+                style={styles.reviewCtaGradient}
               >
-                <Text
-                  style={{
-                    color: '#fff',
-                    fontWeight: '900',
-                    textAlign: 'center',
-                  }}
-                >
+                <Text style={styles.reviewCtaText}>
                   {`Review due (${dueCount})`}
                 </Text>
               </LinearGradient>
             </Pressable>
           ) : (
-            <View
-              style={{
-                alignSelf: 'center',
-                borderRadius: 999,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                backgroundColor: t.colors.surface2,
-                borderWidth: 1,
-                borderColor: t.colors.border,
-                shadowColor: t.colors.shadow,
-                shadowOpacity: 0.22,
-                shadowRadius: 18,
-                shadowOffset: { width: 0, height: 12 },
-                elevation: 6,
-              }}
-            >
-              <Pressable
-                disabled
-                style={{ opacity: 0.7 }}
-              >
-                <Text
-                  style={{
-                    color: t.colors.textMuted,
-                    fontWeight: '900',
-                    textAlign: 'center',
-                  }}
-                >
+            <View style={styles.reviewCtaDisabled}>
+              <Pressable disabled style={styles.reviewCtaDisabledPressable}>
+                <Text style={styles.reviewCtaDisabledText}>
                   {`Review due (${dueCount})`}
                 </Text>
               </Pressable>
@@ -378,4 +314,122 @@ export default function DeckScreen() {
       ) : null}
     </Screen>
   );
+}
+
+function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
+  return StyleSheet.create({
+    headerActionRow: {
+      justifyContent: 'flex-end',
+    },
+    headerIconButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    headerBackButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    missingWrap: {
+      flex: 1,
+      padding: theme.spacing.lg,
+    },
+    headerSummary: {
+      paddingHorizontal: theme.spacing.lg,
+      // The native stack header already handles safe area; keep only a small gutter.
+      paddingTop: 12,
+    },
+    headerSummaryRow: {
+      alignItems: 'center',
+    },
+    headerSummaryText: {
+      color: theme.colors.textMuted,
+    },
+    list: {
+      flex: 1,
+    },
+    cardPressable: {
+      marginBottom: 12,
+    },
+    cardContent: {
+      gap: 6,
+    },
+    cardHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    cardHeaderText: {
+      flex: 1,
+      paddingRight: 10,
+    },
+    cardPill: {
+      alignSelf: 'flex-start',
+    },
+    cardFooterRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+    },
+    cardFooterText: {
+      flex: 1,
+      paddingRight: 10,
+    },
+    cardDueText: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      lineHeight: 22,
+      fontWeight: '500' as const,
+      textAlign: 'right',
+    },
+    emptyWrap: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+    },
+    reviewCtaWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: 10,
+    },
+    reviewCtaPressable: {
+      alignSelf: 'center',
+    },
+    reviewCtaGradient: {
+      borderRadius: 999,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      shadowColor: theme.colors.shadow,
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 6,
+    },
+    reviewCtaText: {
+      color: '#fff',
+      fontWeight: '900' as const,
+      textAlign: 'center',
+    },
+    reviewCtaDisabled: {
+      alignSelf: 'center',
+      borderRadius: 999,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.colors.surface2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: theme.colors.shadow,
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 6,
+    },
+    reviewCtaDisabledPressable: {
+      opacity: 0.7,
+    },
+    reviewCtaDisabledText: {
+      color: theme.colors.textMuted,
+      fontWeight: '900' as const,
+      textAlign: 'center',
+    },
+  });
 }

@@ -8,14 +8,14 @@ type Props = TextProps & {
 };
 
 export function Text({ variant = 'body', style, ...rest }: Props) {
-  const t = useDecklyTheme();
+  const theme = useDecklyTheme();
   return (
     <RNText
       {...rest}
       style={[
         styles.base,
-        { color: t.colors.text },
-        variantStyles(variant, t.colors.textMuted),
+        { color: theme.colors.text },
+        variantStyles(variant, theme.colors.textMuted),
         style,
       ]}
     />
