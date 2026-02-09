@@ -1,5 +1,13 @@
 import * as appSettingsRepo from '@/data/repositories/appSettingsRepo';
 import type { AiExampleLevel } from '@/domain/prefs';
+import {
+  DEFAULT_DAILY_REVIEW_LIMIT,
+  DEFAULT_NEW_CARDS_PER_SESSION,
+} from '@/domain/scheduling/constants';
+import {
+  clampDailyReviewLimit,
+  clampNewCardsPerSession,
+} from '@/domain/scheduling/sessionQueue';
 
 type DeckPrefs = {
   secondaryLanguage?: string | null;
@@ -7,6 +15,8 @@ type DeckPrefs = {
   studyReversed?: boolean;
   showExamplesOnFront?: boolean;
   showExamplesOnBack?: boolean;
+  newCardsPerSession?: number;
+  dailyReviewLimit?: number;
 };
 
 function key(deckId: string): string {
@@ -40,6 +50,14 @@ export async function getDeckPrefs(deckId: string): Promise<DeckPrefs> {
       typeof obj.showExamplesOnFront === 'boolean' ? obj.showExamplesOnFront : true,
     showExamplesOnBack:
       typeof obj.showExamplesOnBack === 'boolean' ? obj.showExamplesOnBack : true,
+    newCardsPerSession:
+      typeof obj.newCardsPerSession === 'number'
+        ? clampNewCardsPerSession(obj.newCardsPerSession)
+        : DEFAULT_NEW_CARDS_PER_SESSION,
+    dailyReviewLimit:
+      typeof obj.dailyReviewLimit === 'number'
+        ? clampDailyReviewLimit(obj.dailyReviewLimit)
+        : DEFAULT_DAILY_REVIEW_LIMIT,
   };
 }
 
@@ -100,6 +118,34 @@ export async function setShowExamplesOnBack(deckId: string, value: boolean): Pro
   const next: DeckPrefs = {
     ...prefs,
     showExamplesOnBack: !!value,
+  };
+  await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
+}
+
+export async function getNewCardsPerSession(deckId: string): Promise<number> {
+  const prefs = await getDeckPrefs(deckId);
+  return clampNewCardsPerSession(prefs.newCardsPerSession ?? DEFAULT_NEW_CARDS_PER_SESSION);
+}
+
+export async function setNewCardsPerSession(deckId: string, value: number): Promise<void> {
+  const prefs = await getDeckPrefs(deckId);
+  const next: DeckPrefs = {
+    ...prefs,
+    newCardsPerSession: clampNewCardsPerSession(value),
+  };
+  await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
+}
+
+export async function getDailyReviewLimit(deckId: string): Promise<number> {
+  const prefs = await getDeckPrefs(deckId);
+  return clampDailyReviewLimit(prefs.dailyReviewLimit ?? DEFAULT_DAILY_REVIEW_LIMIT);
+}
+
+export async function setDailyReviewLimit(deckId: string, value: number): Promise<void> {
+  const prefs = await getDeckPrefs(deckId);
+  const next: DeckPrefs = {
+    ...prefs,
+    dailyReviewLimit: clampDailyReviewLimit(value),
   };
   await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
 }

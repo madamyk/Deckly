@@ -5,10 +5,22 @@ import Animated, { FadeInRight, FadeOutLeft, FadeInDown, FadeOutDown } from 'rea
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
-import { getShowExamplesOnBack, getShowExamplesOnFront, getStudyReversed } from '@/data/repositories/deckPrefsRepo';
+import {
+  getDailyReviewLimit,
+  getNewCardsPerSession,
+  getShowExamplesOnBack,
+  getShowExamplesOnFront,
+  getStudyReversed,
+} from '@/data/repositories/deckPrefsRepo';
 import type { Card } from '@/domain/models';
 import type { Rating } from '@/domain/ratings';
 import { schedule } from '@/domain/scheduling/schedule';
+import {
+  DEFAULT_AGAIN_REINSERT_AFTER_CARDS,
+  DEFAULT_DAILY_REVIEW_LIMIT,
+  DEFAULT_NEW_CARDS_PER_SESSION,
+} from '@/domain/scheduling/constants';
+import { pickDueCardsForQueue, upsertReinforcementCard } from '@/domain/scheduling/sessionQueue';
 import { Button } from '@/ui/components/Button';
 import { EmptyState } from '@/ui/components/EmptyState';
 import { FlipCard } from '@/ui/components/FlipCard';
@@ -21,6 +33,8 @@ import { softHaptic, successHaptic } from '@/ui/haptics';
 import { nowMs } from '@/utils/time';
 import { useDecklyTheme } from '@/ui/theme/provider';
 import { usePrefsStore } from '@/stores/prefsStore';
+
+const DUE_FETCH_LIMIT = 200;
 
 export default function ReviewScreen() {
   const theme = useDecklyTheme();
@@ -37,13 +51,20 @@ export default function ReviewScreen() {
   const [studyReversed, setStudyReversed] = useState(false);
   const [showExamplesOnFront, setShowExamplesOnFront] = useState(true);
   const [showExamplesOnBack, setShowExamplesOnBack] = useState(true);
+  const [newCardsPerSession, setNewCardsPerSession] = useState(DEFAULT_NEW_CARDS_PER_SESSION);
+  const [dailyReviewLimit, setDailyReviewLimit] = useState(DEFAULT_DAILY_REVIEW_LIMIT);
+  const [introducedNewCount, setIntroducedNewCount] = useState(0);
+  const [reviewedCardIds, setReviewedCardIds] = useState<string[]>([]);
+  const [reviewedCount, setReviewedCount] = useState(0);
   const resumeRef = useRef(false);
-  const currentIdRef = useRef<string | null>(null);
-  const flippedRef = useRef(false);
   const [history, setHistory] = useState<
     {
       cardId: string;
       prevIndex: number;
+      prevQueue: Card[];
+      prevReviewedCardIds: string[];
+      prevIntroducedNewCount: number;
+      prevReviewedCount: number;
       prevScheduling: {
         state: Card['state'];
         dueAt: number;
@@ -57,30 +78,42 @@ export default function ReviewScreen() {
     }[]
   >([]);
 
-  const load = useCallback(async (opts?: { preserve?: boolean }) => {
-    const preserve = !!opts?.preserve;
-    const prevId = preserve ? currentIdRef.current : null;
-    const prevFlipped = preserve ? flippedRef.current : false;
-    const cards = await cardsRepo.getDueCards({ deckId, now: nowMs(), limit: 50 });
-    setQueue(cards);
-    if (preserve && prevId) {
-      const nextIndex = cards.findIndex((c) => c.id === prevId);
-      if (nextIndex >= 0) {
-        setIndex(nextIndex);
-        setFlippedId(prevFlipped ? prevId : null);
-        return;
-      }
-    }
-    setIndex(0);
-    setFlippedId(null);
-    setHistory([]);
-  }, [deckId]);
+  const load = useCallback(
+    async (opts?: {
+      preserve?: boolean;
+      newCardsPerSession?: number;
+      dailyReviewLimit?: number;
+    }) => {
+      const preserve = !!opts?.preserve;
+      if (preserve) return;
+      const effectiveNewCardsPerSession = opts?.newCardsPerSession ?? newCardsPerSession;
+      const effectiveDailyReviewLimit = opts?.dailyReviewLimit ?? dailyReviewLimit;
+
+      const due = await cardsRepo.getDueCards({ deckId, now: nowMs(), limit: DUE_FETCH_LIMIT });
+      const selected = pickDueCardsForQueue({
+        dueCards: due,
+        queuedIds: new Set<string>(),
+        reviewedIds: new Set<string>(),
+        introducedNewCount: 0,
+        newCardsPerSession: effectiveNewCardsPerSession,
+        maxCardsToPick: effectiveDailyReviewLimit <= 0 ? undefined : effectiveDailyReviewLimit,
+      });
+
+      setQueue(selected.picked);
+      setIntroducedNewCount(selected.introducedNewCount);
+      setReviewedCardIds([]);
+      setReviewedCount(0);
+      setIndex(0);
+      setFlippedId(null);
+      setHistory([]);
+    },
+    [deckId, dailyReviewLimit, newCardsPerSession],
+  );
 
   useFocusEffect(
     useCallback(() => {
       const preserve = resumeRef.current;
       resumeRef.current = false;
-      load({ preserve });
       (async () => {
         const reversed = await getStudyReversed(String(deckId));
         setStudyReversed(reversed);
@@ -88,6 +121,15 @@ export default function ReviewScreen() {
         setShowExamplesOnFront(showFront);
         const showBack = await getShowExamplesOnBack(String(deckId));
         setShowExamplesOnBack(showBack);
+        const newLimit = await getNewCardsPerSession(String(deckId));
+        setNewCardsPerSession(newLimit);
+        const dailyLimit = await getDailyReviewLimit(String(deckId));
+        setDailyReviewLimit(dailyLimit);
+        await load({
+          preserve,
+          newCardsPerSession: newLimit,
+          dailyReviewLimit: dailyLimit,
+        });
       })();
     }, [load, deckId]),
   );
@@ -111,15 +153,11 @@ export default function ReviewScreen() {
   const note = current?.exampleNote?.trim() ? current.exampleNote.trim() : null;
   const noteVisible = examplesEnabled && !!note;
   const noteAnimate = animateExamples;
+  const dailyTarget = dailyReviewLimit > 0 ? dailyReviewLimit : null;
   const progress = useMemo(() => {
-    if (!queue.length) return '0/0';
-    return `${Math.min(index + 1, queue.length)}/${queue.length}`;
-  }, [index, queue.length]);
-
-  useEffect(() => {
-    currentIdRef.current = current?.id ?? null;
-    flippedRef.current = !!current && flippedId === current.id;
-  }, [current, flippedId]);
+    if (dailyTarget != null) return `${Math.min(reviewedCount, dailyTarget)}/${dailyTarget}`;
+    return `${reviewedCount}`;
+  }, [dailyTarget, reviewedCount]);
 
   async function rate(rating: Rating) {
     if (!current) return;
@@ -131,6 +169,10 @@ export default function ReviewScreen() {
       const undoEntry = {
         cardId: current.id,
         prevIndex: index,
+        prevQueue: queue,
+        prevReviewedCardIds: reviewedCardIds,
+        prevIntroducedNewCount: introducedNewCount,
+        prevReviewedCount: reviewedCount,
         prevScheduling: {
           state: current.state,
           dueAt: current.dueAt,
@@ -146,15 +188,46 @@ export default function ReviewScreen() {
       const patch = schedule(current, rating, now);
       await cardsRepo.applyScheduling(current.id, patch);
       await successHaptic();
-      setHistory((h) => [...h, undoEntry]);
-
-      // Advance in-session (we don't re-queue "Again" since it won't be due for 10m anyway).
-      const nextIndex = index + 1;
-      if (nextIndex >= queue.length) {
-        setIndex(nextIndex);
-      } else {
-        setIndex(nextIndex);
+      const updatedCurrent = { ...current, ...patch };
+      let nextQueue = queue.map((card, cardIndex) =>
+        cardIndex === index ? updatedCurrent : card,
+      );
+      if (rating === 'again') {
+        nextQueue = upsertReinforcementCard({
+          queue: nextQueue,
+          afterIndex: index,
+          card: updatedCurrent,
+          afterCards: DEFAULT_AGAIN_REINSERT_AFTER_CARDS,
+        });
       }
+
+      const nextReviewedCount = reviewedCount + 1;
+      const dailyTarget = dailyReviewLimit > 0 ? dailyReviewLimit : Number.MAX_SAFE_INTEGER;
+      const nextIndex = index + 1;
+      const remainingQueueCount = Math.max(0, nextQueue.length - nextIndex);
+
+      let nextIntroducedCount = introducedNewCount;
+      if (nextReviewedCount + remainingQueueCount < dailyTarget) {
+        const due = await cardsRepo.getDueCards({ deckId, now: nowMs(), limit: DUE_FETCH_LIMIT });
+        const refill = pickDueCardsForQueue({
+          dueCards: due,
+          queuedIds: new Set(nextQueue.slice(nextIndex).map((card) => card.id)),
+          reviewedIds: new Set([...reviewedCardIds, current.id]),
+          introducedNewCount,
+          newCardsPerSession,
+          maxCardsToPick: dailyTarget - nextReviewedCount - remainingQueueCount,
+        });
+        nextIntroducedCount = refill.introducedNewCount;
+        if (refill.picked.length) nextQueue = [...nextQueue, ...refill.picked];
+      }
+
+      setHistory((h) => [...h, undoEntry]);
+      setQueue(nextQueue);
+      setReviewedCardIds((ids) => [...ids, current.id]);
+      setReviewedCount(nextReviewedCount);
+      setIntroducedNewCount(nextIntroducedCount);
+      setFlippedId(null);
+      setIndex(nextIndex);
     } catch (e: any) {
       Alert.alert('Deckly', e?.message ?? 'Failed to update scheduling.');
     } finally {
@@ -169,9 +242,10 @@ export default function ReviewScreen() {
     setLoading(true);
     try {
       await cardsRepo.applyScheduling(last.cardId, last.prevScheduling);
-      setQueue((q) =>
-        q.map((c) => (c.id === last.cardId ? { ...c, ...last.prevScheduling } : c)),
-      );
+      setQueue(last.prevQueue);
+      setReviewedCardIds(last.prevReviewedCardIds);
+      setIntroducedNewCount(last.prevIntroducedNewCount);
+      setReviewedCount(last.prevReviewedCount);
       setIndex(last.prevIndex);
       setFlippedId(null);
       setHistory((h) => h.slice(0, -1));
@@ -283,10 +357,11 @@ export default function ReviewScreen() {
         key={current.id}
         entering={FadeInRight.duration(180)}
         exiting={FadeOutLeft.duration(140)}
+        style={styles.cardStage}
       >
         <Row style={styles.progressRow}>
           <Text variant="mono" style={styles.progressText}>
-            {progress}
+            {dailyTarget != null ? `Reviewed ${progress}` : `Reviewed ${progress} cards`}
           </Text>
           <Row gap={10} style={styles.progressActions}>
             <Pill
@@ -418,9 +493,13 @@ export default function ReviewScreen() {
             ) : null}
           </>
         ) : (
-          <>
-            <View style={styles.unflippedSpacer} />
-          </>
+          <Pressable
+            onPress={() => setFlippedId((prev) => (prev === current.id ? null : current.id))}
+            style={({ pressed }) => [
+              styles.unflippedTapZone,
+              { opacity: pressed ? 0.96 : 1 },
+            ]}
+          />
         )}
       </Animated.View>
     </Screen>
@@ -474,6 +553,9 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
     progressPill: {
       alignSelf: 'center',
     },
+    cardStage: {
+      flex: 1,
+    },
     actionsSpacer: {
       height: 10,
     },
@@ -503,8 +585,8 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
       color: theme.colors.textMuted,
       textAlign: 'left',
     },
-    unflippedSpacer: {
-      height: 8,
+    unflippedTapZone: {
+      flex: 1,
     },
   });
 }

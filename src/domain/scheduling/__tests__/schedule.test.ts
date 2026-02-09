@@ -66,7 +66,7 @@ describe('schedule()', () => {
   });
 
   test('learning + good graduates after last step', () => {
-    const c = baseCard({ state: 'learning', learningStepIndex: 1 });
+    const c = baseCard({ state: 'learning', learningStepIndex: 2 });
     const p = schedule(c, 'good', NOW);
     expect(p.state).toBe('review');
     expect(p.intervalDays).toBe(2);
