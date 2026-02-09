@@ -64,6 +64,7 @@ function RootLayoutNav() {
           <Stack.Screen name="index" options={{ title: 'Deckly' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
           <Stack.Screen name="settings/ai" options={{ title: 'AI Assist' }} />
+          <Stack.Screen name="settings/tags" options={{ title: 'Tag Manager' }} />
           <Stack.Screen name="settings/ai-debug" options={{ title: 'AI Debug' }} />
           <Stack.Screen name="deck/[deckId]/index" options={{ title: 'Deck' }} />
           <Stack.Screen
@@ -86,6 +87,15 @@ function RootLayoutNav() {
           <Stack.Screen name="deck/[deckId]/cards/new" options={{ title: 'New Card' }} />
           <Stack.Screen name="deck/[deckId]/cards/[cardId]" options={{ title: 'Edit Card' }} />
           <Stack.Screen name="deck/[deckId]/review/index" options={{ title: 'Review' }} />
+          <Stack.Screen
+            name="deck/[deckId]/tags"
+            options={{
+              title: 'Tags',
+              presentation: 'pageSheet',
+              gestureEnabled: true,
+            }}
+          />
+          <Stack.Screen name="review/tag/[tag]" options={{ title: 'Tag Review' }} />
           <Stack.Screen
             name="deck/[deckId]/extra-language"
             options={{

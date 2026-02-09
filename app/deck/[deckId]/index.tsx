@@ -157,6 +157,7 @@ export default function DeckScreen() {
 
   const dueCount = stats?.due ?? 0;
   const totalCount = stats?.total ?? 0;
+  const masteryRatio = totalCount > 0 ? Math.max(0, Math.min(1, (stats?.mature ?? 0) / totalCount)) : 0;
   const hasCards = totalCount > 0;
   // Room for the floating CTA + home indicator, without an excessive blank tail.
   const listBottomPad = insets.bottom + 76;
@@ -185,14 +186,29 @@ export default function DeckScreen() {
         ]}
       >
         {hasCards ? (
-          <Row style={styles.headerSummaryRow}>
-            <Text variant="mono" style={styles.headerSummaryText}>
-              {totalCount} cards
-            </Text>
-            <Text variant="mono" style={styles.headerSummaryText}>
-              {dueCount} due now
-            </Text>
-          </Row>
+          <View style={styles.headerSummaryBlock}>
+            <Row style={styles.headerSummaryRow}>
+              <Text variant="mono" style={styles.headerSummaryText}>
+                {totalCount} cards
+              </Text>
+              <Text variant="mono" style={styles.headerSummaryText}>
+                {dueCount} due now
+              </Text>
+            </Row>
+            {masteryRatio > 0 ? (
+              <View style={styles.masteryTrack}>
+                <View
+                  style={[
+                    styles.masteryFill,
+                    {
+                      width: `${Math.round(masteryRatio * 100)}%`,
+                      backgroundColor: accent,
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
@@ -341,8 +357,21 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
     headerSummaryRow: {
       alignItems: 'center',
     },
+    headerSummaryBlock: {
+      gap: 8,
+    },
     headerSummaryText: {
       color: theme.colors.textMuted,
+    },
+    masteryTrack: {
+      height: 3,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface2,
+      overflow: 'hidden',
+    },
+    masteryFill: {
+      height: '100%',
+      borderRadius: 999,
     },
     list: {
       flex: 1,

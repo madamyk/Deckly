@@ -13,6 +13,7 @@ import {
   setStudyReversed,
 } from '@/data/repositories/deckPrefsRepo';
 import { getDeck } from '@/data/repositories/decksRepo';
+import { getDeckTags, setDeckTags } from '@/data/repositories/tagsRepo';
 import { getLanguageOption } from '@/domain/languages';
 import type { Deck } from '@/domain/models';
 import {
@@ -37,7 +38,7 @@ import { DECK_ACCENTS, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -65,6 +66,10 @@ export function DeckSettingsScreen(props: { deckId: string }) {
   const [savedNewCardsPerSession, setSavedNewCardsPerSession] = useState(DEFAULT_NEW_CARDS_PER_SESSION);
   const [dailyReviewLimit, setDailyReviewLimitState] = useState(String(DEFAULT_DAILY_REVIEW_LIMIT));
   const [savedDailyReviewLimit, setSavedDailyReviewLimit] = useState(DEFAULT_DAILY_REVIEW_LIMIT);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagsDirty, setTagsDirty] = useState(false);
+  const tagsLoadedRef = useRef(false);
+  const tagsRef = useRef<string[]>([]);
   const [studyReversedInfoOpen, setStudyReversedInfoOpen] = useState(false);
   const [pacingInfoOpen, setPacingInfoOpen] = useState<PacingInfoKey | null>(null);
   const [saving, setSaving] = useState(false);
@@ -94,6 +99,16 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     const dailyLimit = await getDailyReviewLimit(props.deckId);
     setDailyReviewLimitState(String(dailyLimit));
     setSavedDailyReviewLimit(dailyLimit);
+    const nextTags = await getDeckTags(props.deckId);
+    if (tagsLoadedRef.current) {
+      const prev = tagsRef.current.map((t) => t.toLocaleLowerCase()).sort().join('|');
+      const next = nextTags.map((t) => t.toLocaleLowerCase()).sort().join('|');
+      if (prev !== next) setTagsDirty(true);
+    } else {
+      tagsLoadedRef.current = true;
+    }
+    tagsRef.current = nextTags;
+    setTags(nextTags);
   }, [props.deckId]);
 
   useFocusEffect(
@@ -121,6 +136,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       studyReversed !== savedStudyReversed ||
       showExamplesOnFront !== savedShowExamplesOnFront ||
       showExamplesOnBack !== savedShowExamplesOnBack ||
+      tagsDirty ||
       parsedNewCardsPerSession !== savedNewCardsPerSession ||
       parsedDailyReviewLimit !== savedDailyReviewLimit
     );
@@ -136,6 +152,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     savedShowExamplesOnFront,
     showExamplesOnBack,
     savedShowExamplesOnBack,
+    tagsDirty,
     parsedNewCardsPerSession,
     savedNewCardsPerSession,
     parsedDailyReviewLimit,
@@ -156,8 +173,10 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       await setStudyReversed(deck.id, studyReversed);
       await setShowExamplesOnFront(deck.id, showExamplesOnFront);
       await setShowExamplesOnBack(deck.id, showExamplesOnBack);
+      await setDeckTags(deck.id, tags);
       await setNewCardsPerSession(deck.id, parsedNewCardsPerSession);
       await setDailyReviewLimit(deck.id, parsedDailyReviewLimit);
+      setTagsDirty(false);
       router.back();
     } catch (e: any) {
       Alert.alert('Deckly', e?.message ?? 'Failed to save deck.');
@@ -302,6 +321,41 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                   </View>
                   <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
                 </Row>
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/deck/[deckId]/tags',
+                    params: { deckId: props.deckId },
+                  })
+                }
+                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1, paddingVertical: 2 })}
+              >
+                <View style={{ gap: 6 }}>
+                  <Row>
+                    <Text variant="label">Tags</Text>
+                  </Row>
+                  <View style={styles.tagWrap}>
+                    {tags.length ? (
+                      <>
+                        {tags.map((tag) => (
+                          <View key={tag} style={styles.tagPill}>
+                            <Text style={styles.tagPillText}>{tag}</Text>
+                          </View>
+                        ))}
+                        <View style={styles.tagAddPill}>
+                          <Ionicons name="add" size={14} color={theme.colors.textMuted} />
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.tagAddButton}>
+                        <Ionicons name="add" size={14} color={theme.colors.text} />
+                        <Text style={styles.tagAddButtonText}>Add tag</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
               </Pressable>
 
               <View style={{ gap: 6 }}>
@@ -500,6 +554,53 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
       paddingHorizontal: 10,
       borderRadius: 10,
       fontSize: 14,
+    },
+    tagWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    tagPill: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: theme.colors.surface2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    tagPillText: {
+      color: theme.colors.text,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600' as const,
+    },
+    tagAddPill: {
+      borderRadius: 999,
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    tagAddButton: {
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.surface2,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'flex-start',
+    },
+    tagAddButtonText: {
+      color: theme.colors.text,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600' as const,
     },
     footer: {
       paddingHorizontal: theme.spacing.lg,

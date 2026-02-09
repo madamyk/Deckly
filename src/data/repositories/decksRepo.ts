@@ -6,6 +6,8 @@ import { deleteDeckPrefs } from '@/data/repositories/deckPrefsRepo';
 import { makeId } from '@/utils/id';
 import { nowMs } from '@/utils/time';
 
+const MASTERY_INTERVAL_DAYS = 7;
+
 function mapDeckRow(row: any): Deck {
   return {
     id: String(row.id),
@@ -104,6 +106,7 @@ export async function deleteDeck(deckId: string): Promise<void> {
       'UPDATE cards SET deletedAt = ?, updatedAt = ? WHERE deckId = ? AND deletedAt IS NULL;',
       [now, now, deckId],
     );
+    await db.runAsync('DELETE FROM deck_tags WHERE deckId = ?;', [deckId]);
   });
   await deleteDeckLanguages(deckId);
   await deleteDeckPrefs(deckId);
@@ -131,6 +134,10 @@ export async function getDeckStats(deckId: string, now = nowMs()): Promise<DeckS
     "SELECT COUNT(*) AS c FROM cards WHERE deckId = ? AND deletedAt IS NULL AND state = 'review';",
     [deckId],
   );
+  const matureRow = await db.getFirstAsync<{ c: number }>(
+    "SELECT COUNT(*) AS c FROM cards WHERE deckId = ? AND deletedAt IS NULL AND state = 'review' AND intervalDays >= ?;",
+    [deckId, MASTERY_INTERVAL_DAYS],
+  );
 
   return {
     total: Number(totalRow?.c ?? 0),
@@ -138,5 +145,6 @@ export async function getDeckStats(deckId: string, now = nowMs()): Promise<DeckS
     new: Number(newRow?.c ?? 0),
     learning: Number(learningRow?.c ?? 0),
     review: Number(reviewRow?.c ?? 0),
+    mature: Number(matureRow?.c ?? 0),
   };
 }

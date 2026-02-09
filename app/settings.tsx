@@ -88,6 +88,13 @@ export default function SettingsScreen() {
                 onPress={() => router.push('/settings/ai')}
                 style={styles.configureButton}
               />
+              <View style={styles.tagsSpacer} />
+              <Button
+                title="Tag Manager"
+                variant="secondary"
+                onPress={() => router.push('/settings/tags')}
+                style={styles.configureButton}
+              />
             </View>
           </View>
         </ScrollView>
@@ -144,6 +151,9 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
     },
     actionSpacer: {
       height: 12,
+    },
+    tagsSpacer: {
+      height: 8,
     },
     configureButton: {
       borderRadius: 999,

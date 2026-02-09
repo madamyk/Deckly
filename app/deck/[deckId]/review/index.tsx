@@ -39,8 +39,12 @@ const DUE_FETCH_LIMIT = 200;
 export default function ReviewScreen() {
   const theme = useDecklyTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { deckId } = useLocalSearchParams<{ deckId: string }>();
+  const { deckId, tag } = useLocalSearchParams<{ deckId?: string; tag?: string }>();
   const { prefs } = usePrefsStore();
+  const normalizedDeckId = typeof deckId === 'string' && deckId.trim() ? deckId.trim() : null;
+  const normalizedTag = typeof tag === 'string' && tag.trim() ? tag.trim() : null;
+  const reviewScope: 'deck' | 'tag' | null = normalizedDeckId ? 'deck' : normalizedTag ? 'tag' : null;
+  const screenTitle = reviewScope === 'tag' ? `Tag: ${normalizedTag}` : 'Review';
 
   const [queue, setQueue] = useState<Card[]>([]);
   const [index, setIndex] = useState(0);
@@ -78,6 +82,20 @@ export default function ReviewScreen() {
     }[]
   >([]);
 
+  const fetchDueCards = useCallback(
+    async (limit = DUE_FETCH_LIMIT): Promise<Card[]> => {
+      const now = nowMs();
+      if (reviewScope === 'tag' && normalizedTag) {
+        return cardsRepo.getDueCardsByTag({ tag: normalizedTag, now, limit });
+      }
+      if (reviewScope === 'deck' && normalizedDeckId) {
+        return cardsRepo.getDueCards({ deckId: normalizedDeckId, now, limit });
+      }
+      return [];
+    },
+    [normalizedDeckId, normalizedTag, reviewScope],
+  );
+
   const load = useCallback(
     async (opts?: {
       preserve?: boolean;
@@ -89,7 +107,7 @@ export default function ReviewScreen() {
       const effectiveNewCardsPerSession = opts?.newCardsPerSession ?? newCardsPerSession;
       const effectiveDailyReviewLimit = opts?.dailyReviewLimit ?? dailyReviewLimit;
 
-      const due = await cardsRepo.getDueCards({ deckId, now: nowMs(), limit: DUE_FETCH_LIMIT });
+      const due = await fetchDueCards(DUE_FETCH_LIMIT);
       const selected = pickDueCardsForQueue({
         dueCards: due,
         queuedIds: new Set<string>(),
@@ -107,7 +125,7 @@ export default function ReviewScreen() {
       setFlippedId(null);
       setHistory([]);
     },
-    [deckId, dailyReviewLimit, newCardsPerSession],
+    [dailyReviewLimit, fetchDueCards, newCardsPerSession],
   );
 
   useFocusEffect(
@@ -115,15 +133,22 @@ export default function ReviewScreen() {
       const preserve = resumeRef.current;
       resumeRef.current = false;
       (async () => {
-        const reversed = await getStudyReversed(String(deckId));
+        let reversed = false;
+        let showFront = true;
+        let showBack = true;
+        let newLimit = DEFAULT_NEW_CARDS_PER_SESSION;
+        let dailyLimit = DEFAULT_DAILY_REVIEW_LIMIT;
+        if (reviewScope === 'deck' && normalizedDeckId) {
+          reversed = await getStudyReversed(normalizedDeckId);
+          showFront = await getShowExamplesOnFront(normalizedDeckId);
+          showBack = await getShowExamplesOnBack(normalizedDeckId);
+          newLimit = await getNewCardsPerSession(normalizedDeckId);
+          dailyLimit = await getDailyReviewLimit(normalizedDeckId);
+        }
         setStudyReversed(reversed);
-        const showFront = await getShowExamplesOnFront(String(deckId));
         setShowExamplesOnFront(showFront);
-        const showBack = await getShowExamplesOnBack(String(deckId));
         setShowExamplesOnBack(showBack);
-        const newLimit = await getNewCardsPerSession(String(deckId));
         setNewCardsPerSession(newLimit);
-        const dailyLimit = await getDailyReviewLimit(String(deckId));
         setDailyReviewLimit(dailyLimit);
         await load({
           preserve,
@@ -131,7 +156,7 @@ export default function ReviewScreen() {
           dailyReviewLimit: dailyLimit,
         });
       })();
-    }, [load, deckId]),
+    }, [load, normalizedDeckId, reviewScope]),
   );
 
   useEffect(() => {
@@ -208,7 +233,7 @@ export default function ReviewScreen() {
 
       let nextIntroducedCount = introducedNewCount;
       if (nextReviewedCount + remainingQueueCount < dailyTarget) {
-        const due = await cardsRepo.getDueCards({ deckId, now: nowMs(), limit: DUE_FETCH_LIMIT });
+        const due = await fetchDueCards(DUE_FETCH_LIMIT);
         const refill = pickDueCardsForQueue({
           dueCards: due,
           queuedIds: new Set(nextQueue.slice(nextIndex).map((card) => card.id)),
@@ -282,7 +307,7 @@ export default function ReviewScreen() {
             softHaptic();
             router.push({
               pathname: '/deck/[deckId]/cards/[cardId]',
-              params: { deckId, cardId: current.id },
+              params: { deckId: current.deckId, cardId: current.id },
             });
           }}
           hitSlop={12}
@@ -314,7 +339,7 @@ export default function ReviewScreen() {
   if (!queue.length) {
     return (
       <Screen edges={['left', 'right', 'bottom']}>
-        <Stack.Screen options={{ title: 'Review' }} />
+        <Stack.Screen options={{ title: screenTitle }} />
         <EmptyState
           title="No cards due"
           message="You're all caught up. Come back later, or add more cards."
@@ -330,7 +355,7 @@ export default function ReviewScreen() {
       <Screen edges={['left', 'right', 'bottom']}>
         <Stack.Screen
           options={{
-            title: 'Review',
+            title: screenTitle,
             headerRight,
           }}
         />
@@ -348,7 +373,7 @@ export default function ReviewScreen() {
     <Screen edges={['left', 'right', 'bottom']}>
       <Stack.Screen
         options={{
-          title: 'Review',
+          title: screenTitle,
           headerRight,
         }}
       />
@@ -457,7 +482,7 @@ export default function ReviewScreen() {
                 resumeRef.current = true;
                 router.push({
                   pathname: '/deck/[deckId]/review/chat/[cardId]',
-                  params: { deckId, cardId: current.id },
+                  params: { deckId: current.deckId, cardId: current.id },
                 });
               }}
             />

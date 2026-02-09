@@ -4,8 +4,8 @@ export type DecklyDb = SQLite.SQLiteDatabase;
 
 let dbPromise: Promise<DecklyDb> | null = null;
 
-// Dev-time schema version. If it changes, we reset the local DB (wipe all local data).
-const SCHEMA_VERSION = 3;
+// Production-safe schema versioning: migrate forward, never wipe user data.
+const SCHEMA_VERSION = 4;
 
 export async function getDb(): Promise<DecklyDb> {
   if (!dbPromise) {
@@ -23,69 +23,103 @@ async function setUserVersion(db: DecklyDb, v: number): Promise<void> {
   await db.execAsync(`PRAGMA user_version = ${v};`);
 }
 
-async function resetToSchema(db: DecklyDb): Promise<void> {
+async function ensureCoreSchema(db: DecklyDb): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS decks (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      accentColor TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      deletedAt INTEGER
+    );
+  `);
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS cards (
+      id TEXT PRIMARY KEY NOT NULL,
+      deckId TEXT NOT NULL,
+      front TEXT NOT NULL,
+      back TEXT NOT NULL,
+
+      -- Bilingual example pair (offline persisted)
+      exampleL1 TEXT,
+      exampleL2 TEXT,
+      exampleNote TEXT,
+      exampleSource TEXT, -- "user" | "ai" | NULL
+      exampleGeneratedAt INTEGER,
+
+      -- Scheduling
+      state TEXT NOT NULL,
+      dueAt INTEGER NOT NULL,
+      intervalDays INTEGER NOT NULL DEFAULT 0,
+      ease REAL NOT NULL DEFAULT 2.5,
+      reps INTEGER NOT NULL DEFAULT 0,
+      lapses INTEGER NOT NULL DEFAULT 0,
+      learningStepIndex INTEGER NOT NULL DEFAULT 0,
+
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      deletedAt INTEGER,
+
+      FOREIGN KEY(deckId) REFERENCES decks(id)
+    );
+  `);
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
+  `);
+
+  await db.execAsync('CREATE INDEX IF NOT EXISTS idx_cards_deck_due ON cards(deckId, dueAt);');
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_cards_deck_updated ON cards(deckId, updatedAt);',
+  );
+  await db.execAsync('CREATE INDEX IF NOT EXISTS idx_cards_deck_state ON cards(deckId, state);');
+}
+
+async function migrateToV4AddTags(db: DecklyDb): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS tags (
+      name TEXT PRIMARY KEY NOT NULL COLLATE NOCASE,
+      createdAt INTEGER NOT NULL
+    );
+  `);
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS deck_tags (
+      deckId TEXT NOT NULL,
+      tagName TEXT NOT NULL COLLATE NOCASE,
+      createdAt INTEGER NOT NULL,
+      PRIMARY KEY (deckId, tagName),
+      FOREIGN KEY(deckId) REFERENCES decks(id),
+      FOREIGN KEY(tagName) REFERENCES tags(name)
+    );
+  `);
+
+  await db.execAsync('CREATE INDEX IF NOT EXISTS idx_deck_tags_tag ON deck_tags(tagName, deckId);');
+}
+
+async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
   await db.execAsync('BEGIN;');
   try {
-    await db.execAsync('DROP TABLE IF EXISTS cards;');
-    await db.execAsync('DROP TABLE IF EXISTS decks;');
-    await db.execAsync('DROP TABLE IF EXISTS app_settings;');
+    // Fresh install.
+    if (fromVersion === 0) {
+      await ensureCoreSchema(db);
+      await migrateToV4AddTags(db);
+      await setUserVersion(db, SCHEMA_VERSION);
+      await db.execAsync('COMMIT;');
+      return;
+    }
 
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS decks (
-        id TEXT PRIMARY KEY NOT NULL,
-        name TEXT NOT NULL,
-        accentColor TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        deletedAt INTEGER
-      );
-    `);
+    // Always ensure base tables/indexes exist.
+    await ensureCoreSchema(db);
 
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS cards (
-        id TEXT PRIMARY KEY NOT NULL,
-        deckId TEXT NOT NULL,
-        front TEXT NOT NULL,
-        back TEXT NOT NULL,
-
-        -- Bilingual example pair (offline persisted)
-        exampleL1 TEXT,
-        exampleL2 TEXT,
-        exampleNote TEXT,
-        exampleSource TEXT, -- "user" | "ai" | NULL
-        exampleGeneratedAt INTEGER,
-
-        -- Scheduling
-        state TEXT NOT NULL,
-        dueAt INTEGER NOT NULL,
-        intervalDays INTEGER NOT NULL DEFAULT 0,
-        ease REAL NOT NULL DEFAULT 2.5,
-        reps INTEGER NOT NULL DEFAULT 0,
-        lapses INTEGER NOT NULL DEFAULT 0,
-        learningStepIndex INTEGER NOT NULL DEFAULT 0,
-
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        deletedAt INTEGER,
-
-        FOREIGN KEY(deckId) REFERENCES decks(id)
-      );
-    `);
-
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY NOT NULL,
-        value TEXT NOT NULL
-      );
-    `);
-
-    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_cards_deck_due ON cards(deckId, dueAt);');
-    await db.execAsync(
-      'CREATE INDEX IF NOT EXISTS idx_cards_deck_updated ON cards(deckId, updatedAt);',
-    );
-    await db.execAsync(
-      'CREATE INDEX IF NOT EXISTS idx_cards_deck_state ON cards(deckId, state);',
-    );
+    if (fromVersion < 4) {
+      await migrateToV4AddTags(db);
+    }
 
     await setUserVersion(db, SCHEMA_VERSION);
     await db.execAsync('COMMIT;');
@@ -101,7 +135,7 @@ export async function initDb(): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL;');
 
   const version = await getUserVersion(db);
-  if (version !== SCHEMA_VERSION) {
-    await resetToSchema(db);
+  if (version < SCHEMA_VERSION) {
+    await migrate(db, version);
   }
 }

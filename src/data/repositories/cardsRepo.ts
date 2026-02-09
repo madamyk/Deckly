@@ -210,6 +210,68 @@ export async function getDueCards(params: {
   return rows.map(mapCardRow);
 }
 
+function roundRobinByDeck(cards: Card[], limit: number): Card[] {
+  const buckets = new Map<string, Card[]>();
+  for (const card of cards) {
+    const bucket = buckets.get(card.deckId);
+    if (bucket) bucket.push(card);
+    else buckets.set(card.deckId, [card]);
+  }
+
+  const deckOrder = [...buckets.entries()]
+    .sort((a, b) => {
+      const aDue = a[1][0]?.dueAt ?? 0;
+      const bDue = b[1][0]?.dueAt ?? 0;
+      if (aDue !== bDue) return aDue - bDue;
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([deckId]) => deckId);
+
+  const out: Card[] = [];
+  while (out.length < limit && deckOrder.length) {
+    for (let i = deckOrder.length - 1; i >= 0; i--) {
+      const deckId = deckOrder[i]!;
+      const bucket = buckets.get(deckId);
+      if (!bucket?.length) {
+        deckOrder.splice(i, 1);
+        continue;
+      }
+      out.push(bucket.shift()!);
+      if (out.length >= limit) break;
+      if (!bucket.length) {
+        deckOrder.splice(i, 1);
+      }
+    }
+  }
+  return out;
+}
+
+export async function getDueCardsByTag(params: {
+  tag: string;
+  now?: number;
+  limit?: number;
+}): Promise<Card[]> {
+  const db = await getDb();
+  const now = params.now ?? nowMs();
+  const limit = params.limit ?? 50;
+  const rows = await db.getAllAsync(
+    `
+    SELECT c.*
+    FROM cards c
+    JOIN deck_tags dt ON dt.deckId = c.deckId
+    JOIN decks d ON d.id = c.deckId
+    WHERE dt.tagName = ?
+      AND d.deletedAt IS NULL
+      AND c.deletedAt IS NULL
+      AND c.dueAt <= ?
+    ORDER BY c.deckId ASC, c.dueAt ASC;
+  `,
+    [params.tag.trim(), now],
+  );
+  const due = rows.map(mapCardRow);
+  return roundRobinByDeck(due, limit);
+}
+
 export async function applyScheduling(cardId: string, patch: CardPatch): Promise<void> {
   const db = await getDb();
 

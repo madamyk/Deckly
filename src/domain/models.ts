@@ -40,4 +40,5 @@ export type DeckStats = {
   new: number;
   learning: number;
   review: number;
+  mature: number;
 };
