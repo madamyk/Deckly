@@ -117,8 +117,7 @@ export default function HomeScreen() {
           </Pressable>
         </Row>
         <Text variant="muted" style={styles.subheader}>
-          Offline-first language flashcards with spaced repetition, plus AI-generated examples and notes you
-          can save and review later.
+          AI-assisted flashcard app for faster learning
         </Text>
         {tags.length ? (
           <View style={styles.tagSection}>
