@@ -6,6 +6,8 @@ import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getDeckStats } from '@/data/repositories/decksRepo';
+import { getDailyReviewLimit } from '@/data/repositories/deckPrefsRepo';
+import { getDeckReviewedToday } from '@/data/repositories/reviewProgressRepo';
 import { getDeckTags, listTagsWithDueCounts } from '@/data/repositories/tagsRepo';
 import type { DeckStats } from '@/domain/models';
 import { useDecksStore } from '@/stores/decksStore';
@@ -23,6 +25,7 @@ export default function HomeScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { decks, loading, error, refresh } = useDecksStore();
   const [statsByDeckId, setStatsByDeckId] = useState<Record<string, DeckStats>>({});
+  const [effectiveDueByDeckId, setEffectiveDueByDeckId] = useState<Record<string, number>>({});
   const [tagsByDeckId, setTagsByDeckId] = useState<Record<string, string[]>>({});
   const [tags, setTags] = useState<{ tag: string; due: number; deckCount: number }[]>([]);
   const insets = useSafeAreaInsets();
@@ -55,12 +58,32 @@ export default function HomeScreen() {
           listTagsWithDueCounts(nowMs()),
           Promise.all(decks.map(async (d) => [d.id, await getDeckTags(d.id)] as const)),
         ]);
+        const limitsAndReviewedPairs = await Promise.all(
+          decks.map(async (d) => {
+            const [dailyLimit, reviewedToday] = await Promise.all([
+              getDailyReviewLimit(d.id),
+              getDeckReviewedToday(d.id),
+            ]);
+            return [d.id, dailyLimit, reviewedToday] as const;
+          }),
+        );
         if (cancelled) return;
         const next: Record<string, DeckStats> = {};
         for (const [id, s] of pairs) next[id] = s;
+        const nextEffectiveDue: Record<string, number> = {};
+        for (const [id, dailyLimit, reviewedToday] of limitsAndReviewedPairs) {
+          const rawDue = next[id]?.due ?? 0;
+          if (dailyLimit <= 0) {
+            nextEffectiveDue[id] = rawDue;
+            continue;
+          }
+          const remaining = Math.max(0, dailyLimit - reviewedToday);
+          nextEffectiveDue[id] = Math.max(0, Math.min(rawDue, remaining));
+        }
         const nextTags: Record<string, string[]> = {};
         for (const [id, deckTags] of deckTagPairs) nextTags[id] = deckTags;
         setStatsByDeckId(next);
+        setEffectiveDueByDeckId(nextEffectiveDue);
         setTagsByDeckId(nextTags);
         setTags(tagRows);
       } catch {
@@ -206,7 +229,7 @@ export default function HomeScreen() {
                         Due now
                       </Text>
                       {(() => {
-                        const due = statsByDeckId[item.id]?.due ?? 0;
+                        const due = effectiveDueByDeckId[item.id] ?? 0;
                         const dueLabel = formatDue(due);
                         const fontSize = dueLabel.length >= 4 ? 18 : 22;
                         return (

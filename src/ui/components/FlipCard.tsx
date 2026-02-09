@@ -52,7 +52,9 @@ export function FlipCard(props: {
           <SurfaceCard style={[styles.card, ...baseCardStyle]}>
             <View style={styles.body}>
               <View style={styles.center}>
-                <Text style={styles.mainText}>{props.front}</Text>
+                <Text selectable style={styles.mainText}>
+                  {props.front}
+                </Text>
               </View>
               {props.frontFooter ? <View style={styles.footer}>{props.frontFooter}</View> : null}
             </View>
@@ -69,7 +71,9 @@ export function FlipCard(props: {
           <SurfaceCard style={[styles.card, ...baseCardStyle]}>
             <View style={styles.body}>
               <View style={styles.center}>
-                <Text style={styles.mainText}>{props.back}</Text>
+                <Text selectable style={styles.mainText}>
+                  {props.back}
+                </Text>
               </View>
               {props.backFooter ? <View style={styles.footer}>{props.backFooter}</View> : null}
             </View>

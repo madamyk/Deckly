@@ -12,6 +12,8 @@ import {
   getShowExamplesOnFront,
   getStudyReversed,
 } from '@/data/repositories/deckPrefsRepo';
+import { addDeckReviewedToday } from '@/data/repositories/reviewProgressRepo';
+import { listDeckIdsByTag } from '@/data/repositories/tagsRepo';
 import type { Card } from '@/domain/models';
 import type { Rating } from '@/domain/ratings';
 import { schedule } from '@/domain/scheduling/schedule';
@@ -69,6 +71,7 @@ export default function ReviewScreen() {
       prevReviewedCardIds: string[];
       prevIntroducedNewCount: number;
       prevReviewedCount: number;
+      deckId: string;
       prevScheduling: {
         state: Card['state'];
         dueAt: number;
@@ -144,6 +147,16 @@ export default function ReviewScreen() {
           showBack = await getShowExamplesOnBack(normalizedDeckId);
           newLimit = await getNewCardsPerSession(normalizedDeckId);
           dailyLimit = await getDailyReviewLimit(normalizedDeckId);
+        } else if (reviewScope === 'tag' && normalizedTag) {
+          const deckIds = await listDeckIdsByTag(normalizedTag);
+          if (deckIds.length) {
+            const limits = await Promise.all(deckIds.map((id) => getDailyReviewLimit(id)));
+            dailyLimit = limits.some((limit) => limit <= 0)
+              ? 0
+              : limits.reduce((sum, limit) => sum + limit, 0);
+          } else {
+            dailyLimit = 0;
+          }
         }
         setStudyReversed(reversed);
         setShowExamplesOnFront(showFront);
@@ -180,7 +193,7 @@ export default function ReviewScreen() {
   const noteAnimate = animateExamples;
   const dailyTarget = dailyReviewLimit > 0 ? dailyReviewLimit : null;
   const progress = useMemo(() => {
-    if (dailyTarget != null) return `${Math.min(reviewedCount, dailyTarget)}/${dailyTarget}`;
+    if (dailyTarget != null) return `${reviewedCount}/${dailyTarget}`;
     return `${reviewedCount}`;
   }, [dailyTarget, reviewedCount]);
 
@@ -198,6 +211,7 @@ export default function ReviewScreen() {
         prevReviewedCardIds: reviewedCardIds,
         prevIntroducedNewCount: introducedNewCount,
         prevReviewedCount: reviewedCount,
+        deckId: current.deckId,
         prevScheduling: {
           state: current.state,
           dueAt: current.dueAt,
@@ -212,6 +226,7 @@ export default function ReviewScreen() {
 
       const patch = schedule(current, rating, now);
       await cardsRepo.applyScheduling(current.id, patch);
+      await addDeckReviewedToday(current.deckId, 1, now);
       await successHaptic();
       const updatedCurrent = { ...current, ...patch };
       let nextQueue = queue.map((card, cardIndex) =>
@@ -267,6 +282,7 @@ export default function ReviewScreen() {
     setLoading(true);
     try {
       await cardsRepo.applyScheduling(last.cardId, last.prevScheduling);
+      await addDeckReviewedToday(last.deckId, -1);
       setQueue(last.prevQueue);
       setReviewedCardIds(last.prevReviewedCardIds);
       setIntroducedNewCount(last.prevIntroducedNewCount);
@@ -507,6 +523,7 @@ export default function ReviewScreen() {
                       contentContainerStyle={styles.noteScrollContent}
                     >
                       <Text
+                        selectable
                         style={styles.noteText}
                       >
                         {note}
@@ -537,23 +554,20 @@ function ExampleFooter(props: {
 }) {
   const theme = useDecklyTheme();
   const styles = useMemo(() => createExampleStyles(theme), [theme]);
-  const [open, setOpen] = useState(!props.collapsedByDefault);
+  const open = !props.collapsedByDefault;
 
   return (
-    <Pressable
-      onPress={() => setOpen((v) => !v)}
-      hitSlop={8}
-      style={({ pressed }) => [styles.examplePressable, { opacity: pressed ? 0.85 : 1 }]}
-    >
+    <View style={styles.examplePressable}>
       <View style={styles.exampleContent}>
         <Text
+          selectable
           style={styles.exampleText}
           numberOfLines={open ? 0 : 4}
         >
           {props.text}
         </Text>
       </View>
-    </Pressable>
+    </View>
   );
 }
 

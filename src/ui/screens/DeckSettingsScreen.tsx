@@ -442,7 +442,6 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                       keyboardType="number-pad"
                       value={dailyReviewLimit}
                       onChangeText={setDailyReviewLimitState}
-                      placeholder={String(DEFAULT_DAILY_REVIEW_LIMIT)}
                       returnKeyType="done"
                       onSubmitEditing={save}
                       style={styles.pacingInput}
