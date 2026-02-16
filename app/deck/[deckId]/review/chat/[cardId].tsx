@@ -477,7 +477,6 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
       borderRadius: 18,
       backgroundColor: theme.colors.surface2,
       width: '100%',
-      marginHorizontal: theme.spacing.sm,
     },
     cardLabel: {
       color: theme.colors.textMuted,

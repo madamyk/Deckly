@@ -1,7 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActionSheetIOS, Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
@@ -158,6 +166,7 @@ export default function DeckScreen() {
   const dueCount = stats?.due ?? 0;
   const totalCount = stats?.total ?? 0;
   const masteryRatio = totalCount > 0 ? Math.max(0, Math.min(1, (stats?.mature ?? 0) / totalCount)) : 0;
+  const masteryPercent = Math.round(masteryRatio * 100);
   const hasCards = totalCount > 0;
   // Room for the floating CTA + home indicator, without an excessive blank tail.
   const listBottomPad = insets.bottom + 76;
@@ -195,19 +204,17 @@ export default function DeckScreen() {
                 {dueCount} due now
               </Text>
             </Row>
-            {masteryRatio > 0 ? (
-              <View style={styles.masteryTrack}>
-                <View
-                  style={[
-                    styles.masteryFill,
-                    {
-                      width: `${Math.round(masteryRatio * 100)}%`,
-                      backgroundColor: accent,
-                    },
-                  ]}
-                />
-              </View>
-            ) : null}
+            <View style={styles.masteryTrack}>
+              <View
+                style={[
+                  styles.masteryFill,
+                  {
+                    width: `${masteryPercent}%`,
+                    backgroundColor: accent,
+                  },
+                ]}
+              />
+            </View>
           </View>
         ) : null}
       </View>
@@ -328,6 +335,7 @@ export default function DeckScreen() {
           )}
         </View>
       ) : null}
+
     </Screen>
   );
 }

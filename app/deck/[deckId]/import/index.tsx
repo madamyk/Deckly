@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Papa from 'papaparse';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -50,6 +51,7 @@ type ParsedCsv = {
 };
 
 type ColItem = { label: string; value: number | null };
+const IMPORT_KEEP_AWAKE_TAG = 'deckly-import-csv';
 
 function asStringCell(v: any): string {
   if (v == null) return '';
@@ -166,6 +168,18 @@ export default function ImportCsvScreen() {
       abortRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!importing) return;
+    void activateKeepAwakeAsync(IMPORT_KEEP_AWAKE_TAG).catch(() => {
+      // Non-fatal; import can continue without wake lock.
+    });
+    return () => {
+      void deactivateKeepAwake(IMPORT_KEEP_AWAKE_TAG).catch(() => {
+        // Best-effort release.
+      });
+    };
+  }, [importing]);
 
   const confirmCancelImport = React.useCallback(() => {
     if (importPhase === 'writing_cards') {
@@ -446,7 +460,7 @@ export default function ImportCsvScreen() {
             deckId,
             cards: cardsForGen,
             mode,
-            concurrency: 2,
+            concurrency: 1,
             batchSize: 10,
             levelOverride: levelOverride ?? undefined,
             signal: controller.signal,

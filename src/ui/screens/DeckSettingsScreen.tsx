@@ -12,10 +12,10 @@ import {
   setShowExamplesOnFront,
   setStudyReversed,
 } from '@/data/repositories/deckPrefsRepo';
-import { getDeck } from '@/data/repositories/decksRepo';
+import { getDeck, getDeckStats } from '@/data/repositories/decksRepo';
 import { getDeckTags, setDeckTags } from '@/data/repositories/tagsRepo';
 import { getLanguageOption } from '@/domain/languages';
-import type { Deck } from '@/domain/models';
+import type { Deck, DeckStats } from '@/domain/models';
 import {
   DEFAULT_DAILY_REVIEW_LIMIT,
   DEFAULT_NEW_CARDS_PER_SESSION,
@@ -36,6 +36,7 @@ import { ToggleRow } from '@/ui/components/ToggleRow';
 import { useKeyboardVisible } from '@/ui/hooks/useKeyboardVisible';
 import { DECK_ACCENTS, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
 import { useDecklyTheme } from '@/ui/theme/provider';
+import { nowMs } from '@/utils/time';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
@@ -52,6 +53,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
   const { updateDeck, deleteDeck } = useDecksStore();
 
   const [deck, setDeck] = useState<Deck | null>(null);
+  const [deckStats, setDeckStats] = useState<DeckStats | null>(null);
   const [name, setName] = useState('');
   const [accentKey, setAccentKey] = useState<string>('');
   const [secondaryLanguage, setSecondaryLanguageState] = useState<string | null>(null);
@@ -80,6 +82,9 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     if (deckRecord) {
       setName(deckRecord.name);
       setAccentKey(deckRecord.accentColor);
+      setDeckStats(await getDeckStats(props.deckId, nowMs()));
+    } else {
+      setDeckStats(null);
     }
     const secondary = await getSecondaryLanguage(props.deckId);
     setSecondaryLanguageState(secondary);
@@ -218,6 +223,14 @@ export function DeckSettingsScreen(props: { deckId: string }) {
   );
 
   const previewColor = resolveDeckAccentColor(accentKey) ?? theme.colors.primary;
+  const totalCount = deckStats?.total ?? 0;
+  const dueCount = deckStats?.due ?? 0;
+  const newCount = deckStats?.new ?? 0;
+  const learningCount = deckStats?.learning ?? 0;
+  const reviewCount = deckStats?.review ?? 0;
+  const matureCount = deckStats?.mature ?? 0;
+  const masteryPercent =
+    totalCount > 0 ? Math.round((matureCount / totalCount) * 100) : 0;
   const secondaryOption = getLanguageOption(secondaryLanguage);
   const extraLabel = secondaryOption
     ? `${secondaryOption.emoji} ${secondaryOption.label}`
@@ -449,6 +462,40 @@ export function DeckSettingsScreen(props: { deckId: string }) {
                   </View>
                 </Row>
               </View>
+
+              <View style={styles.statsSection}>
+                <Text variant="label">Deck stats</Text>
+                <View style={styles.statsRows}>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>Mastery</Text>
+                    <Text style={styles.statsValue}>{`${masteryPercent}%`}</Text>
+                  </Row>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>Total cards</Text>
+                    <Text style={styles.statsValue}>{totalCount}</Text>
+                  </Row>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>Due now</Text>
+                    <Text style={styles.statsValue}>{dueCount}</Text>
+                  </Row>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>New</Text>
+                    <Text style={styles.statsValue}>{newCount}</Text>
+                  </Row>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>Learning</Text>
+                    <Text style={styles.statsValue}>{learningCount}</Text>
+                  </Row>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>Review</Text>
+                    <Text style={styles.statsValue}>{reviewCount}</Text>
+                  </Row>
+                  <Row style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>Mature</Text>
+                    <Text style={styles.statsValue}>{matureCount}</Text>
+                  </Row>
+                </View>
+              </View>
             </View>
           )}
         </ScrollView>
@@ -553,6 +600,29 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
       paddingHorizontal: 10,
       borderRadius: 10,
       fontSize: 14,
+    },
+    statsSection: {
+      gap: 8,
+      marginTop: 4,
+      paddingTop: 2,
+    },
+    statsRows: {
+      gap: 6,
+    },
+    statsRow: {
+      justifyContent: 'space-between',
+    },
+    statsLabel: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '500' as const,
+    },
+    statsValue: {
+      color: theme.colors.text,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600' as const,
     },
     tagWrap: {
       flexDirection: 'row',
