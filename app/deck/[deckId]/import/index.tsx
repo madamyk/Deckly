@@ -78,6 +78,7 @@ export default function ImportCsvScreen() {
   const [backCol, setBackCol] = useState<number | null>(1);
   const [exampleL1Col, setExampleL1Col] = useState<number | null>(null);
   const [exampleL2Col, setExampleL2Col] = useState<number | null>(null);
+  const [exampleNoteCol, setExampleNoteCol] = useState<number | null>(null);
 
   const [aiKeyPresent, setAiKeyPresent] = useState(false);
   const [generateExamples, setGenerateExamples] = useState(false);
@@ -315,11 +316,20 @@ export default function ImportCsvScreen() {
         'examplel2',
         'l2_example',
       ]);
+      const exampleNoteIndex = find([
+        'example_note',
+        'example note',
+        'note',
+        'notes',
+        'usage_note',
+        'usage note',
+      ]);
 
       if (frontIndex >= 0) setFrontCol(frontIndex);
       if (backIndex >= 0) setBackCol(backIndex);
       if (exampleFrontIndex >= 0) setExampleL1Col(exampleFrontIndex);
       if (exampleBackIndex >= 0) setExampleL2Col(exampleBackIndex);
+      if (exampleNoteIndex >= 0) setExampleNoteCol(exampleNoteIndex);
     }
   }
 
@@ -342,11 +352,11 @@ export default function ImportCsvScreen() {
       Alert.alert('Deckly', 'To generate examples, add your OpenAI API key in Settings.');
       return;
     }
-    if (generateExamples && (exampleL1Col != null || exampleL2Col != null)) {
+    if (generateExamples && (exampleL1Col != null || exampleL2Col != null || exampleNoteCol != null)) {
       const proceed = await new Promise<boolean>((resolve) => {
         Alert.alert(
-          'Overwrite CSV examples?',
-          'AI will generate examples for all imported cards and overwrite any example columns in the CSV.',
+          'Overwrite CSV examples/notes?',
+          'AI will generate examples for all imported cards and overwrite any mapped example or note columns in the CSV.',
           [
             { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
             { text: 'Generate', style: 'destructive', onPress: () => resolve(true) },
@@ -390,6 +400,10 @@ export default function ImportCsvScreen() {
           exampleL2Col == null
             ? null
             : String(row[exampleL2Col] ?? '').trim() || null;
+        const exampleNote =
+          exampleNoteCol == null
+            ? null
+            : String(row[exampleNoteCol] ?? '').trim() || null;
 
         if (!front || !back) {
           skippedInvalid++;
@@ -408,8 +422,8 @@ export default function ImportCsvScreen() {
           back,
           exampleL1,
           exampleL2,
-          exampleNote: null,
-          exampleSource: exampleL1 || exampleL2 ? 'user' : null,
+          exampleNote,
+          exampleSource: exampleL1 || exampleL2 || exampleNote ? 'user' : null,
           exampleGeneratedAt: null,
         });
       }
@@ -542,20 +556,25 @@ export default function ImportCsvScreen() {
       const back = backCol == null ? '' : String(row[backCol] ?? '');
       const exampleFrontRaw = exampleL1Col == null ? '' : String(row[exampleL1Col] ?? '');
       const exampleBackRaw = exampleL2Col == null ? '' : String(row[exampleL2Col] ?? '');
+      const exampleNoteRaw = exampleNoteCol == null ? '' : String(row[exampleNoteCol] ?? '');
 
       const exampleFront = exampleFrontRaw.trim() ? exampleFrontRaw : '';
       const exampleBack = exampleBackRaw.trim() ? exampleBackRaw : '';
+      const exampleNote = exampleNoteRaw.trim() ? exampleNoteRaw : '';
 
       const willGenerateFront = aiMode;
       const willGenerateBack = aiMode;
+      const willGenerateNote = aiMode;
 
       return {
         front,
         back,
         exampleFront,
         exampleBack,
+        exampleNote,
         willGenerateFront,
         willGenerateBack,
+        willGenerateNote,
       };
     });
   }, [
@@ -564,6 +583,7 @@ export default function ImportCsvScreen() {
     backCol,
     exampleL1Col,
     exampleL2Col,
+    exampleNoteCol,
     prefs.ai.enabled,
     aiKeyPresent,
     generateExamples,
@@ -618,7 +638,7 @@ export default function ImportCsvScreen() {
               style={styles.selectedCard}
             >
               <View style={styles.flex1}>
-                <Text numberOfLines={1} style={styles.fileName}>
+                <Text numberOfLines={1} ellipsizeMode="middle" style={styles.fileName}>
                   {parsed.fileName}
                 </Text>
                 <Text variant="muted">{rows.length} rows</Text>
@@ -695,6 +715,15 @@ export default function ImportCsvScreen() {
                   value={exampleL2Col}
                   items={colItems}
                   onChange={(v) => setExampleL2Col(v)}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <ColumnSelect
+                  label="Example note"
+                  value={exampleNoteCol}
+                  items={colItems}
+                  onChange={(v) => setExampleNoteCol(v)}
                 />
               </View>
 
@@ -845,7 +874,12 @@ export default function ImportCsvScreen() {
                             </Text>
                           </View>
                         </View>
-                        {row.exampleFront || row.exampleBack || row.willGenerateFront || row.willGenerateBack ? (
+                        {row.exampleFront ||
+                        row.exampleBack ||
+                        row.exampleNote ||
+                        row.willGenerateFront ||
+                        row.willGenerateBack ||
+                        row.willGenerateNote ? (
                           <View style={styles.examplesBlock}>
                             <View style={styles.examplesHeader}>
                               <Text style={styles.examplesTitle}>
@@ -879,6 +913,21 @@ export default function ImportCsvScreen() {
                                   ? 'AI will generate on import'
                                   : row.exampleBack
                                     ? row.exampleBack
+                                    : '—'}
+                              </Text>
+                            </View>
+                            <View style={styles.examplesRow}>
+                              <Text variant="label" style={styles.examplesLabel}>
+                                Note
+                              </Text>
+                              <Text
+                                style={styles.examplesValue}
+                                numberOfLines={2}
+                              >
+                                {row.willGenerateNote
+                                  ? 'AI will generate on import'
+                                  : row.exampleNote
+                                    ? row.exampleNote
                                     : '—'}
                               </Text>
                             </View>

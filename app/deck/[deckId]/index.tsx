@@ -18,6 +18,7 @@ import type { Card as CardModel, Deck, DeckStats } from '@/domain/models';
 import { useImportResultStore } from '@/stores/importResultStore';
 import { Card } from '@/ui/components/Card';
 import { EmptyState } from '@/ui/components/EmptyState';
+import { Input } from '@/ui/components/Input';
 import { Pill } from '@/ui/components/Pill';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
@@ -37,6 +38,7 @@ export default function DeckScreen() {
   const [deck, setDeck] = useState<Deck | null>(null);
   const [stats, setStats] = useState<DeckStats | null>(null);
   const [cards, setCards] = useState<CardModel[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const openAddMenu = useCallback(() => {
     const addCard = () =>
       router.push({ pathname: '/deck/[deckId]/cards/new', params: { deckId } });
@@ -167,6 +169,15 @@ export default function DeckScreen() {
   const totalCount = stats?.total ?? 0;
   const masteryRatio = totalCount > 0 ? Math.max(0, Math.min(1, (stats?.mature ?? 0) / totalCount)) : 0;
   const masteryPercent = Math.round(masteryRatio * 100);
+  const normalizedSearch = useMemo(() => searchQuery.trim().toLocaleLowerCase(), [searchQuery]);
+  const filteredCards = useMemo(() => {
+    if (!normalizedSearch) return cards;
+    return cards.filter((card) => {
+      const front = card.front.toLocaleLowerCase();
+      const back = card.back.toLocaleLowerCase();
+      return front.includes(normalizedSearch) || back.includes(normalizedSearch);
+    });
+  }, [cards, normalizedSearch]);
   const hasCards = totalCount > 0;
   // Room for the floating CTA + home indicator, without an excessive blank tail.
   const listBottomPad = insets.bottom + 76;
@@ -215,6 +226,26 @@ export default function DeckScreen() {
                 ]}
               />
             </View>
+            <Input
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              style={styles.searchInput}
+              right={
+                searchQuery.trim() ? (
+                  <Pressable
+                    onPress={() => setSearchQuery('')}
+                    hitSlop={8}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+                  >
+                    <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+                  </Pressable>
+                ) : undefined
+              }
+            />
           </View>
         ) : null}
       </View>
@@ -222,7 +253,7 @@ export default function DeckScreen() {
       {hasCards ? (
         <>
           <FlatList
-            data={cards}
+            data={filteredCards}
             keyExtractor={(c) => c.id}
             // Indicator on the screen edge, content padded.
             style={styles.list}
@@ -231,6 +262,13 @@ export default function DeckScreen() {
               // Keep the last item visible above the floating CTA + home indicator.
               paddingBottom: listBottomPad,
             }}
+            ListEmptyComponent={
+              normalizedSearch ? (
+                <View style={styles.searchEmptyWrap}>
+                  <Text variant="muted">No cards match your search.</Text>
+                </View>
+              ) : null
+            }
             renderItem={({ item }) => (
               <Pressable
                 onPress={() =>
@@ -381,8 +419,19 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
       height: '100%',
       borderRadius: 999,
     },
+    searchInput: {
+      height: 40,
+      paddingVertical: 0,
+      textAlignVertical: 'center',
+      borderRadius: 12,
+      fontSize: 14,
+    },
     list: {
       flex: 1,
+    },
+    searchEmptyWrap: {
+      paddingTop: 20,
+      paddingBottom: 8,
     },
     cardPressable: {
       marginBottom: 12,
