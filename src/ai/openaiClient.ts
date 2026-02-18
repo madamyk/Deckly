@@ -1,3 +1,5 @@
+import OpenAI from 'openai';
+
 import {
   buildExampleBatchPrompt,
   buildExamplePrompt,
@@ -81,9 +83,12 @@ export async function detectDeckLanguagesWithOpenAi(params: {
   let content = '';
   let meta: OpenAiMeta | null = null;
   try {
-    const response_format = {
-      type: 'json_schema',
-      json_schema: {
+    const result = await responsesCompletion({
+      apiKey: params.apiKey,
+      model: params.prefs.model,
+      messages,
+      jsonSchema: {
+        type: 'json_schema',
         name: 'deck_languages',
         strict: true,
         schema: {
@@ -97,13 +102,8 @@ export async function detectDeckLanguagesWithOpenAi(params: {
           },
         },
       },
-    };
-    const result = await chatCompletion({
-      apiKey: params.apiKey,
-      model: params.prefs.model,
-      messages,
-      response_format,
       reasoningEffort: params.prefs.reasoningEffort,
+      maxOutputTokens: 400,
       signal: params.signal,
     });
     content = result.content;
@@ -170,13 +170,15 @@ export async function generateExamplePairWithOpenAi(params: {
     { role: 'user', content: prompt },
   ];
 
-  // First attempt.
   let content = '';
   let meta: OpenAiMeta | null = null;
   try {
-    const response_format = {
-      type: 'json_schema',
-      json_schema: {
+    const result = await responsesCompletion({
+      apiKey: params.apiKey,
+      model: params.prefs.model,
+      messages,
+      jsonSchema: {
+        type: 'json_schema',
         name: 'example_pair',
         strict: true,
         schema: {
@@ -190,14 +192,8 @@ export async function generateExamplePairWithOpenAi(params: {
           },
         },
       },
-    };
-
-    const result = await chatCompletion({
-      apiKey: params.apiKey,
-      model: params.prefs.model,
-      messages,
-      response_format,
       reasoningEffort: params.prefs.reasoningEffort,
+      maxOutputTokens: 800,
       signal: params.signal,
     });
     content = result.content;
@@ -271,9 +267,12 @@ export async function generateExamplePairsWithOpenAi(params: {
   let content = '';
   let meta: OpenAiMeta | null = null;
   try {
-    const response_format = {
-      type: 'json_schema',
-      json_schema: {
+    const result = await responsesCompletion({
+      apiKey: params.apiKey,
+      model: params.prefs.model,
+      messages,
+      jsonSchema: {
+        type: 'json_schema',
         name: 'example_pairs',
         strict: true,
         schema: {
@@ -298,14 +297,8 @@ export async function generateExamplePairsWithOpenAi(params: {
           },
         },
       },
-    };
-
-    const result = await chatCompletion({
-      apiKey: params.apiKey,
-      model: params.prefs.model,
-      messages,
-      response_format,
       reasoningEffort: params.prefs.reasoningEffort,
+      maxOutputTokens: Math.min(12000, Math.max(2500, params.items.length * 500)),
       signal: params.signal,
     });
     content = result.content;
@@ -381,9 +374,12 @@ export async function translateTermWithOpenAi(params: {
   let content = '';
   let meta: OpenAiMeta | null = null;
   try {
-    const response_format = {
-      type: 'json_schema',
-      json_schema: {
+    const result = await responsesCompletion({
+      apiKey: params.apiKey,
+      model: params.prefs.model,
+      messages,
+      jsonSchema: {
+        type: 'json_schema',
         name: 'term_translation',
         strict: true,
         schema: {
@@ -395,14 +391,8 @@ export async function translateTermWithOpenAi(params: {
           },
         },
       },
-    };
-
-    const result = await chatCompletion({
-      apiKey: params.apiKey,
-      model: params.prefs.model,
-      messages,
-      response_format,
       reasoningEffort: params.prefs.reasoningEffort,
+      maxOutputTokens: 220,
       signal: params.signal,
     });
     content = result.content;
@@ -444,82 +434,101 @@ export async function chatWithOpenAi(params: {
   signal?: AbortSignal;
 }): Promise<{ text: string; meta: OpenAiMeta }> {
   if (!params.apiKey?.trim()) throw new OpenAiError('missing_key', 'OpenAI API key is missing.');
-  const result = await chatCompletion({
+  const result = await responsesCompletion({
     apiKey: params.apiKey,
     model: params.model,
     messages: params.messages,
-    response_format: undefined,
     reasoningEffort: params.reasoningEffort,
     signal: params.signal,
   });
   return { text: result.content, meta: result.meta };
 }
 
-async function chatCompletion(params: {
+function createClient(apiKey: string): OpenAI {
+  return new OpenAI({
+    apiKey,
+    dangerouslyAllowBrowser: true,
+    maxRetries: 0,
+  });
+}
+
+async function responsesCompletion(params: {
   apiKey: string;
   model: string;
   messages: ChatMessage[];
-  response_format?: any;
   reasoningEffort?: AiReasoningEffort;
+  jsonSchema?: {
+    type: 'json_schema';
+    name: string;
+    strict: boolean;
+    schema: Record<string, unknown>;
+  };
+  maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<{ content: string; meta: OpenAiMeta }> {
-  const body: any = {
-    model: params.model,
-    messages: params.messages,
-  };
-  if (supportsReasoningEffort(params.model)) {
-    body.reasoning_effort = params.reasoningEffort ?? 'low';
+  const client = createClient(params.apiKey);
+
+  const systemInstruction = params.messages
+    .filter((m) => m.role === 'system')
+    .map((m) => m.content.trim())
+    .filter(Boolean)
+    .join('\n\n');
+  const inputMessages = params.messages.filter((m) => m.role !== 'system');
+  if (!inputMessages.length) {
+    throw new OpenAiError('bad_response', 'At least one non-system message is required.');
   }
-  if (params.response_format) {
-    body.response_format = params.response_format;
+
+  const request: any = {
+    model: params.model,
+    input: inputMessages.map((message) => ({
+      role: message.role,
+      content: [{ type: 'input_text', text: message.content }],
+    })),
+  };
+
+  if (systemInstruction) request.instructions = systemInstruction;
+  if (supportsReasoningEffort(params.model)) {
+    request.reasoning = { effort: params.reasoningEffort ?? 'low' };
+  }
+  if (params.jsonSchema) {
+    request.text = { format: params.jsonSchema };
+  }
+  if (typeof params.maxOutputTokens === 'number') {
+    request.max_output_tokens = params.maxOutputTokens;
   }
 
   const start = Date.now();
-  const res = await fetchWithRetry(
-    'https://api.openai.com/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${params.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: params.signal,
-    },
-    params.signal,
-  );
-  const durationMs = Date.now() - start;
-  const processingMsRaw =
-    res.headers.get('openai-processing-ms') ?? res.headers.get('x-openai-processing-ms');
-  const parsedProcessingMs = processingMsRaw ? Number(processingMsRaw) : NaN;
-  const processingMs = Number.isFinite(parsedProcessingMs) ? parsedProcessingMs : undefined;
-  const requestId =
-    res.headers.get('x-request-id') ?? res.headers.get('openai-request-id') ?? undefined;
-  const meta: OpenAiMeta = { durationMs, processingMs, requestId };
-
-  if (res.status === 401 || res.status === 403) {
-    throw new OpenAiError('invalid_key', 'OpenAI API key is invalid.', res.status, {
-      model: params.model,
-      ...meta,
-    });
+  const runResponse = () => client.responses.create(request, { signal: params.signal });
+  let response = await runResponsesWithRetry(runResponse, params.signal);
+  const initialIncompleteReason = getIncompleteReason(response);
+  if (initialIncompleteReason === 'max_output_tokens' && typeof request.max_output_tokens === 'number') {
+    // One automatic retry with a larger output budget prevents common JSON truncation failures.
+    request.max_output_tokens = Math.min(20000, Math.max(request.max_output_tokens * 2, 1200));
+    response = await runResponsesWithRetry(runResponse, params.signal);
   }
-  if (!res.ok) {
-    const text = await safeText(res);
+  const durationMs = Date.now() - start;
+  const requestId =
+    (response as any)?._request_id ??
+    (response as any)?.request_id ??
+    undefined;
+  const meta: OpenAiMeta = { durationMs, requestId };
+
+  const incompleteReason = getIncompleteReason(response);
+  if (incompleteReason) {
     throw new OpenAiError(
       'bad_response',
-      `OpenAI error (${res.status}). ${text}`.trim(),
-      res.status,
+      `OpenAI response was incomplete (${incompleteReason}).`,
+      undefined,
       {
         model: params.model,
-        responseText: text,
+        responseText: extractOutputText(response),
         ...meta,
       },
     );
   }
 
-  const data: any = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
+  const content = extractOutputText(response);
+  if (!content.trim()) {
     throw new OpenAiError('bad_response', 'OpenAI response was empty.', undefined, {
       model: params.model,
       ...meta,
@@ -528,44 +537,99 @@ async function chatCompletion(params: {
   return { content, meta };
 }
 
-function supportsReasoningEffort(model: string): boolean {
-  return model.startsWith('gpt-5');
+function extractOutputText(response: any): string {
+  if (typeof response?.output_text === 'string' && response.output_text.trim()) {
+    return response.output_text;
+  }
+
+  const chunks: string[] = [];
+  const outputItems = Array.isArray(response?.output) ? response.output : [];
+  for (const item of outputItems) {
+    if (item?.type !== 'message') continue;
+    const contentItems = Array.isArray(item?.content) ? item.content : [];
+    for (const contentItem of contentItems) {
+      if (contentItem?.type !== 'output_text') continue;
+      if (typeof contentItem?.text !== 'string' || !contentItem.text) continue;
+      chunks.push(contentItem.text);
+    }
+  }
+  return chunks.join('\n');
 }
 
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
+function getIncompleteReason(response: any): string | null {
+  const status = typeof response?.status === 'string' ? response.status : '';
+  if (status !== 'incomplete') return null;
+  const reason = response?.incomplete_details?.reason;
+  return typeof reason === 'string' && reason ? reason : 'unknown_reason';
+}
+
+async function runResponsesWithRetry<T>(
+  fn: () => Promise<T>,
   signal?: AbortSignal,
-): Promise<Response> {
+): Promise<T> {
   const maxAttempts = 3; // 1 + 2 retries
   let attempt = 0;
+
   while (true) {
     attempt++;
     try {
-      const res = await fetch(url, init);
-      if (res.status === 429 && attempt < maxAttempts) {
+      return await fn();
+    } catch (error: any) {
+      if (isAborted(error, signal)) {
+        throw new OpenAiError('cancelled', 'Request cancelled.');
+      }
+
+      const status = getStatus(error);
+      if ((status === 429 || (typeof status === 'number' && status >= 500)) && attempt < maxAttempts) {
         await sleep(650 * attempt, signal);
         continue;
       }
-      return res;
-    } catch (e: any) {
-      if (signal?.aborted) throw new OpenAiError('cancelled', 'Request cancelled.');
+      if (status === 401 || status === 403) {
+        throw new OpenAiError('invalid_key', 'OpenAI API key is invalid.', status);
+      }
+      if (status === 429) {
+        throw new OpenAiError('rate_limited', 'OpenAI rate limit exceeded. Please retry shortly.', status);
+      }
+      if (typeof status === 'number') {
+        throw new OpenAiError(
+          'bad_response',
+          `OpenAI error (${status}). ${errorSnippet(error)}`.trim(),
+          status,
+        );
+      }
+
       if (attempt < maxAttempts) {
         await sleep(650 * attempt, signal);
         continue;
       }
-      throw new OpenAiError('network', e?.message ?? 'Network error.');
+
+      throw new OpenAiError('network', error?.message ?? 'Network error.');
     }
   }
 }
 
-async function safeText(res: Response): Promise<string> {
-  try {
-    const t = await res.text();
-    return t.slice(0, 200);
-  } catch {
-    return '';
+function supportsReasoningEffort(model: string): boolean {
+  return model.startsWith('gpt-5');
+}
+
+function getStatus(error: any): number | undefined {
+  const candidates = [error?.status, error?.statusCode, error?.response?.status];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
   }
+  return undefined;
+}
+
+function isAborted(error: any, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  if (error?.name === 'AbortError') return true;
+  if (error?.code === 'ABORT_ERR') return true;
+  return false;
+}
+
+function errorSnippet(error: any): string {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  return message.slice(0, 200);
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
