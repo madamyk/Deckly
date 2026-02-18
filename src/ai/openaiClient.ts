@@ -480,9 +480,11 @@ async function responsesCompletion(params: {
 
   const request: any = {
     model: params.model,
+    // Use plain string message content so role-specific content item types are handled by the API.
+    // (e.g. assistant history messages in follow-up turns)
     input: inputMessages.map((message) => ({
       role: message.role,
-      content: [{ type: 'input_text', text: message.content }],
+      content: message.content,
     })),
   };
 
