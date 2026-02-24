@@ -57,7 +57,7 @@ src/
 
 ## Data Model (SQLite)
 - `decks`: id, name, accentColor, createdAt/updatedAt/deletedAt
-- `cards`: deckId, front/back, exampleL1/exampleL2/exampleNote/exampleSource/exampleGeneratedAt, scheduling fields (state, dueAt, intervalDays, ease, reps, lapses, learningStepIndex, timestamps)
+- `cards`: deckId, front/back, exampleFront/exampleBack/exampleNote/exampleSource/exampleGeneratedAt, scheduling fields (state, dueAt, intervalDays, ease, reps, lapses, learningStepIndex, timestamps)
 - `app_settings`: key/value for prefs and counters
 - `deck_tags`: deckId, tagName
 

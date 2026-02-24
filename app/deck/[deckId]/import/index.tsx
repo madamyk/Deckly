@@ -76,8 +76,8 @@ export default function ImportCsvScreen() {
   const [dedupeInfoOpen, setDedupeInfoOpen] = useState(false);
   const [frontCol, setFrontCol] = useState<number | null>(0);
   const [backCol, setBackCol] = useState<number | null>(1);
-  const [exampleL1Col, setExampleL1Col] = useState<number | null>(null);
-  const [exampleL2Col, setExampleL2Col] = useState<number | null>(null);
+  const [exampleFrontCol, setexampleFrontCol] = useState<number | null>(null);
+  const [exampleBackCol, setexampleBackCol] = useState<number | null>(null);
   const [exampleNoteCol, setExampleNoteCol] = useState<number | null>(null);
 
   const [aiKeyPresent, setAiKeyPresent] = useState(false);
@@ -304,7 +304,7 @@ export default function ImportCsvScreen() {
         'example front',
         'example_front (front)',
         'example_l1',
-        'examplel1',
+        'exampleFront',
         'l1_example',
         'example',
       ]);
@@ -313,7 +313,7 @@ export default function ImportCsvScreen() {
         'example back',
         'example_back (back)',
         'example_l2',
-        'examplel2',
+        'exampleBack',
         'l2_example',
       ]);
       const exampleNoteIndex = find([
@@ -327,8 +327,8 @@ export default function ImportCsvScreen() {
 
       if (frontIndex >= 0) setFrontCol(frontIndex);
       if (backIndex >= 0) setBackCol(backIndex);
-      if (exampleFrontIndex >= 0) setExampleL1Col(exampleFrontIndex);
-      if (exampleBackIndex >= 0) setExampleL2Col(exampleBackIndex);
+      if (exampleFrontIndex >= 0) setexampleFrontCol(exampleFrontIndex);
+      if (exampleBackIndex >= 0) setexampleBackCol(exampleBackIndex);
       if (exampleNoteIndex >= 0) setExampleNoteCol(exampleNoteIndex);
     }
   }
@@ -352,7 +352,7 @@ export default function ImportCsvScreen() {
       Alert.alert('Deckly', 'To generate examples, add your OpenAI API key in Settings.');
       return;
     }
-    if (generateExamples && (exampleL1Col != null || exampleL2Col != null || exampleNoteCol != null)) {
+    if (generateExamples && (exampleFrontCol != null || exampleBackCol != null || exampleNoteCol != null)) {
       const proceed = await new Promise<boolean>((resolve) => {
         Alert.alert(
           'Overwrite CSV examples/notes?',
@@ -382,8 +382,8 @@ export default function ImportCsvScreen() {
         id: string;
         front: string;
         back: string;
-        exampleL1?: string | null;
-        exampleL2?: string | null;
+        exampleFront?: string | null;
+        exampleBack?: string | null;
         exampleNote?: string | null;
         exampleSource?: ExampleSource | null;
         exampleGeneratedAt?: number | null;
@@ -392,14 +392,14 @@ export default function ImportCsvScreen() {
       for (const row of dataRows) {
         const front = (row[frontCol] ?? '').trim();
         const back = (row[backCol] ?? '').trim();
-        const exampleL1 =
-          exampleL1Col == null
+        const exampleFront =
+          exampleFrontCol == null
             ? null
-            : String(row[exampleL1Col] ?? '').trim() || null;
-        const exampleL2 =
-          exampleL2Col == null
+            : String(row[exampleFrontCol] ?? '').trim() || null;
+        const exampleBack =
+          exampleBackCol == null
             ? null
-            : String(row[exampleL2Col] ?? '').trim() || null;
+            : String(row[exampleBackCol] ?? '').trim() || null;
         const exampleNote =
           exampleNoteCol == null
             ? null
@@ -420,10 +420,10 @@ export default function ImportCsvScreen() {
           id: makeId(),
           front,
           back,
-          exampleL1,
-          exampleL2,
+          exampleFront,
+          exampleBack,
           exampleNote,
-          exampleSource: exampleL1 || exampleL2 || exampleNote ? 'user' : null,
+          exampleSource: exampleFront || exampleBack || exampleNote ? 'user' : null,
           exampleGeneratedAt: null,
         });
       }
@@ -446,8 +446,8 @@ export default function ImportCsvScreen() {
           samples: items.slice(0, 3).map((it) => ({
             front: it.front,
             back: it.back,
-            example_front: it.exampleL1 ?? null,
-            example_back: it.exampleL2 ?? null,
+            example_front: it.exampleFront ?? null,
+            example_back: it.exampleBack ?? null,
           })),
           forceDetect: true,
           signal: controller.signal,
@@ -460,8 +460,8 @@ export default function ImportCsvScreen() {
           id: it.id,
           front: it.front,
           back: it.back,
-          exampleL1: it.exampleL1 ?? null,
-          exampleL2: it.exampleL2 ?? null,
+          exampleFront: it.exampleFront ?? null,
+          exampleBack: it.exampleBack ?? null,
         }));
 
         const mode = 'all';
@@ -554,8 +554,8 @@ export default function ImportCsvScreen() {
     return take.map((row) => {
       const front = frontCol == null ? '' : String(row[frontCol] ?? '');
       const back = backCol == null ? '' : String(row[backCol] ?? '');
-      const exampleFrontRaw = exampleL1Col == null ? '' : String(row[exampleL1Col] ?? '');
-      const exampleBackRaw = exampleL2Col == null ? '' : String(row[exampleL2Col] ?? '');
+      const exampleFrontRaw = exampleFrontCol == null ? '' : String(row[exampleFrontCol] ?? '');
+      const exampleBackRaw = exampleBackCol == null ? '' : String(row[exampleBackCol] ?? '');
       const exampleNoteRaw = exampleNoteCol == null ? '' : String(row[exampleNoteCol] ?? '');
 
       const exampleFront = exampleFrontRaw.trim() ? exampleFrontRaw : '';
@@ -581,8 +581,8 @@ export default function ImportCsvScreen() {
     dataRows,
     frontCol,
     backCol,
-    exampleL1Col,
-    exampleL2Col,
+    exampleFrontCol,
+    exampleBackCol,
     exampleNoteCol,
     prefs.ai.enabled,
     aiKeyPresent,
@@ -703,18 +703,18 @@ export default function ImportCsvScreen() {
               <View style={styles.fieldGroup}>
                 <ColumnSelect
                   label="Example front"
-                  value={exampleL1Col}
+                  value={exampleFrontCol}
                   items={colItems}
-                  onChange={(v) => setExampleL1Col(v)}
+                  onChange={(v) => setexampleFrontCol(v)}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
                 <ColumnSelect
                   label="Example back"
-                  value={exampleL2Col}
+                  value={exampleBackCol}
                   items={colItems}
-                  onChange={(v) => setExampleL2Col(v)}
+                  onChange={(v) => setexampleBackCol(v)}
                 />
               </View>
 
@@ -875,11 +875,11 @@ export default function ImportCsvScreen() {
                           </View>
                         </View>
                         {row.exampleFront ||
-                        row.exampleBack ||
-                        row.exampleNote ||
-                        row.willGenerateFront ||
-                        row.willGenerateBack ||
-                        row.willGenerateNote ? (
+                          row.exampleBack ||
+                          row.exampleNote ||
+                          row.willGenerateFront ||
+                          row.willGenerateBack ||
+                          row.willGenerateNote ? (
                           <View style={styles.examplesBlock}>
                             <View style={styles.examplesHeader}>
                               <Text style={styles.examplesTitle}>

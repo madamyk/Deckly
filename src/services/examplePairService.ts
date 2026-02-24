@@ -1,15 +1,15 @@
-import { generateExamplePairWithOpenAi, generateExamplePairsWithOpenAi, OpenAiError } from '@/ai/openaiClient';
-import { applyExampleToCardPatch, type ExamplePair } from '@/ai/examplePairs';
 import { appendAiDebugEntry } from '@/ai/debugLog';
+import { applyExampleToCardPatch, type ExamplePair } from '@/ai/examplePairs';
+import { generateExamplePairsWithOpenAi, generateExamplePairWithOpenAi, OpenAiError } from '@/ai/openaiClient';
 import { isSlowOpenAi } from '@/ai/telemetry';
-import { getAiApiKey } from '@/data/secureStore';
 import * as cardsRepo from '@/data/repositories/cardsRepo';
 import * as deckAiRepo from '@/data/repositories/deckAiRepo';
+import { getAiApiKey } from '@/data/secureStore';
 import type { AiExampleLevel } from '@/domain/prefs';
-import { usePrefsStore } from '@/stores/prefsStore';
 import { ensureDeckLanguages } from '@/services/deckLanguageService';
-import { nowMs } from '@/utils/time';
+import { usePrefsStore } from '@/stores/prefsStore';
 import { pLimit } from '@/utils/pLimit';
+import { nowMs } from '@/utils/time';
 
 export async function generateExamplePair(params: {
   deckId: string;
@@ -86,7 +86,7 @@ export async function generateExamplePair(params: {
 
 export async function generateAndPersistExamplePairs(params: {
   deckId: string;
-  cards: { id: string; front: string; back: string; exampleL1: string | null; exampleL2: string | null }[];
+  cards: { id: string; front: string; back: string; exampleFront: string | null; exampleBack: string | null }[];
   mode: 'missing' | 'all';
   levelOverride?: AiExampleLevel;
   concurrency?: number;
@@ -107,7 +107,7 @@ export async function generateAndPersistExamplePairs(params: {
   const toGenerate =
     params.mode === 'all'
       ? params.cards
-      : params.cards.filter((c) => !c.exampleL1?.trim() || !c.exampleL2?.trim());
+      : params.cards.filter((c) => !c.exampleFront?.trim() || !c.exampleBack?.trim());
 
   const total = toGenerate.length;
   const failed: { cardId: string; reason: string }[] = [];
@@ -157,9 +157,9 @@ export async function generateAndPersistExamplePairs(params: {
           frontText: c.frontText,
           backText: c.backText,
           seedExampleFront:
-            params.mode === 'missing' ? (c.exampleL1?.trim() ? c.exampleL1.trim() : null) : null,
+            params.mode === 'missing' ? (c.exampleFront?.trim() ? c.exampleFront.trim() : null) : null,
           seedExampleBack:
-            params.mode === 'missing' ? (c.exampleL2?.trim() ? c.exampleL2.trim() : null) : null,
+            params.mode === 'missing' ? (c.exampleBack?.trim() ? c.exampleBack.trim() : null) : null,
         }));
 
         try {
@@ -189,8 +189,8 @@ export async function generateAndPersistExamplePairs(params: {
               const patch = applyExampleToCardPatch(pair, { source: 'ai', now: nowMs() });
               // "Missing" mode should not overwrite CSV-provided examples.
               if (params.mode === 'missing') {
-                if (c.exampleL1?.trim()) patch.exampleL1 = c.exampleL1.trim();
-                if (c.exampleL2?.trim()) patch.exampleL2 = c.exampleL2.trim();
+                if (c.exampleFront?.trim()) patch.exampleFront = c.exampleFront.trim();
+                if (c.exampleBack?.trim()) patch.exampleBack = c.exampleBack.trim();
               }
               await cardsRepo.updateCard(c.id, patch);
               if (isSlowOpenAi(result.meta)) {
@@ -249,7 +249,7 @@ export async function generateAndPersistExamplePairs(params: {
 
 export async function generateExamplePairsInMemory(params: {
   deckId: string;
-  cards: { id: string; front: string; back: string; exampleL1: string | null; exampleL2: string | null }[];
+  cards: { id: string; front: string; back: string; exampleFront: string | null; exampleBack: string | null }[];
   mode: 'missing' | 'all';
   levelOverride?: AiExampleLevel;
   concurrency?: number;
@@ -275,7 +275,7 @@ export async function generateExamplePairsInMemory(params: {
   const toGenerate =
     params.mode === 'all'
       ? params.cards
-      : params.cards.filter((c) => !c.exampleL1?.trim() || !c.exampleL2?.trim());
+      : params.cards.filter((c) => !c.exampleFront?.trim() || !c.exampleBack?.trim());
 
   const total = toGenerate.length;
   const failed: { cardId: string; reason: string }[] = [];
@@ -326,9 +326,9 @@ export async function generateExamplePairsInMemory(params: {
           frontText: c.frontText,
           backText: c.backText,
           seedExampleFront:
-            params.mode === 'missing' ? (c.exampleL1?.trim() ? c.exampleL1.trim() : null) : null,
+            params.mode === 'missing' ? (c.exampleFront?.trim() ? c.exampleFront.trim() : null) : null,
           seedExampleBack:
-            params.mode === 'missing' ? (c.exampleL2?.trim() ? c.exampleL2.trim() : null) : null,
+            params.mode === 'missing' ? (c.exampleBack?.trim() ? c.exampleBack.trim() : null) : null,
         }));
 
         try {
@@ -356,8 +356,8 @@ export async function generateExamplePairsInMemory(params: {
             }
             const patch = applyExampleToCardPatch(pair, { source: 'ai', now: nowMs() });
             if (params.mode === 'missing') {
-              if (c.exampleL1?.trim()) patch.exampleL1 = c.exampleL1.trim();
-              if (c.exampleL2?.trim()) patch.exampleL2 = c.exampleL2.trim();
+              if (c.exampleFront?.trim()) patch.exampleFront = c.exampleFront.trim();
+              if (c.exampleBack?.trim()) patch.exampleBack = c.exampleBack.trim();
             }
             patches[c.id] = patch;
             if (isSlowOpenAi(result.meta)) {

@@ -1,12 +1,12 @@
-import { buildTeacherSystemPrompt } from '@/ai/teacherChat';
-import { chatWithOpenAi, OpenAiError, type ChatMessage } from '@/ai/openaiClient';
 import { appendAiDebugEntry } from '@/ai/debugLog';
+import { chatWithOpenAi, OpenAiError, type ChatMessage } from '@/ai/openaiClient';
+import { buildTeacherSystemPrompt } from '@/ai/teacherChat';
 import { isSlowOpenAi } from '@/ai/telemetry';
+import { getAiApiKey } from '@/data/secureStore';
 import type { Card } from '@/domain/models';
 import type { AiReasoningEffort } from '@/domain/prefs';
-import { getAiApiKey } from '@/data/secureStore';
-import { usePrefsStore } from '@/stores/prefsStore';
 import { ensureDeckLanguages } from '@/services/deckLanguageService';
+import { usePrefsStore } from '@/stores/prefsStore';
 
 export type ChatHistoryItem = { role: 'user' | 'assistant'; text: string };
 
@@ -33,17 +33,15 @@ export async function sendCardChatMessage(params: {
       {
         front: params.card.front,
         back: params.card.back,
-        example_front: params.card.exampleL1,
-        example_back: params.card.exampleL2,
+        example_front: params.card.exampleFront,
+        example_back: params.card.exampleBack,
       },
     ],
     signal: params.signal,
   });
 
   const system = buildTeacherSystemPrompt({
-    frontText: params.card.front,
-    backText: params.card.back,
-    note: params.card.exampleNote,
+    card: params.card,
     front_language: langs.front_language,
     back_language: langs.back_language,
     extraInstruction: params.extraSystemInstruction,

@@ -5,7 +5,7 @@ export type DecklyDb = SQLite.SQLiteDatabase;
 let dbPromise: Promise<DecklyDb> | null = null;
 
 // Production-safe schema versioning: migrate forward, never wipe user data.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export async function getDb(): Promise<DecklyDb> {
   if (!dbPromise) {
@@ -43,8 +43,8 @@ async function ensureCoreSchema(db: DecklyDb): Promise<void> {
       back TEXT NOT NULL,
 
       -- Bilingual example pair (offline persisted)
-      exampleL1 TEXT,
-      exampleL2 TEXT,
+      exampleFront TEXT,
+      exampleBack TEXT,
       exampleNote TEXT,
       exampleSource TEXT, -- "user" | "ai" | NULL
       exampleGeneratedAt INTEGER,
@@ -102,6 +102,19 @@ async function migrateToV4AddTags(db: DecklyDb): Promise<void> {
   await db.execAsync('CREATE INDEX IF NOT EXISTS idx_deck_tags_tag ON deck_tags(tagName, deckId);');
 }
 
+async function migrateToV5RenameCardExampleColumns(db: DecklyDb): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(cards);');
+  const columnNames = new Set(columns.map((column) => String(column.name)));
+
+  if (columnNames.has('exampleL1') && !columnNames.has('exampleFront')) {
+    await db.execAsync('ALTER TABLE cards RENAME COLUMN exampleL1 TO exampleFront;');
+  }
+
+  if (columnNames.has('exampleL2') && !columnNames.has('exampleBack')) {
+    await db.execAsync('ALTER TABLE cards RENAME COLUMN exampleL2 TO exampleBack;');
+  }
+}
+
 async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
   await db.execAsync('BEGIN;');
   try {
@@ -109,6 +122,7 @@ async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
     if (fromVersion === 0) {
       await ensureCoreSchema(db);
       await migrateToV4AddTags(db);
+      await migrateToV5RenameCardExampleColumns(db);
       await setUserVersion(db, SCHEMA_VERSION);
       await db.execAsync('COMMIT;');
       return;
@@ -119,6 +133,9 @@ async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
 
     if (fromVersion < 4) {
       await migrateToV4AddTags(db);
+    }
+    if (fromVersion < 5) {
+      await migrateToV5RenameCardExampleColumns(db);
     }
 
     await setUserVersion(db, SCHEMA_VERSION);

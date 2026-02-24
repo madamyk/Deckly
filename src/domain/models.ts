@@ -15,8 +15,8 @@ export type Card = {
   deckId: string;
   front: string;
   back: string;
-  exampleL1: string | null;
-  exampleL2: string | null;
+  exampleFront: string | null;
+  exampleBack: string | null;
   exampleNote: string | null;
   exampleSource: ExampleSource | null;
   exampleGeneratedAt: number | null;

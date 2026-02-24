@@ -1,8 +1,8 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import Animated, { FadeInRight, FadeOutLeft, FadeInDown, FadeOutDown } from 'react-native-reanimated';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { FadeInDown, FadeInRight, FadeOutDown, FadeOutLeft } from 'react-native-reanimated';
 
 import * as cardsRepo from '@/data/repositories/cardsRepo';
 import {
@@ -16,13 +16,14 @@ import { addDeckReviewedToday } from '@/data/repositories/reviewProgressRepo';
 import { listDeckIdsByTag } from '@/data/repositories/tagsRepo';
 import type { Card } from '@/domain/models';
 import type { Rating } from '@/domain/ratings';
-import { schedule } from '@/domain/scheduling/schedule';
 import {
   DEFAULT_AGAIN_REINSERT_AFTER_CARDS,
   DEFAULT_DAILY_REVIEW_LIMIT,
   DEFAULT_NEW_CARDS_PER_SESSION,
 } from '@/domain/scheduling/constants';
+import { schedule } from '@/domain/scheduling/schedule';
 import { pickDueCardsForQueue, upsertReinforcementCard } from '@/domain/scheduling/sessionQueue';
+import { usePrefsStore } from '@/stores/prefsStore';
 import { Button } from '@/ui/components/Button';
 import { EmptyState } from '@/ui/components/EmptyState';
 import { FlipCard } from '@/ui/components/FlipCard';
@@ -32,9 +33,8 @@ import { Screen } from '@/ui/components/Screen';
 import { Text } from '@/ui/components/Text';
 import { cardStateLabel, cardStateTone } from '@/ui/components/cardStatePill';
 import { softHaptic, successHaptic } from '@/ui/haptics';
-import { nowMs } from '@/utils/time';
 import { useDecklyTheme } from '@/ui/theme/provider';
-import { usePrefsStore } from '@/stores/prefsStore';
+import { nowMs } from '@/utils/time';
 
 const DUE_FETCH_LIMIT = 200;
 
@@ -182,8 +182,8 @@ export default function ReviewScreen() {
   const flipped = !!current && flippedId === current.id;
   const frontText = current ? (studyReversed ? current.back : current.front) : '';
   const backText = current ? (studyReversed ? current.front : current.back) : '';
-  const frontExampleText = current ? (studyReversed ? current.exampleL2 : current.exampleL1) : null;
-  const backExampleText = current ? (studyReversed ? current.exampleL1 : current.exampleL2) : null;
+  const frontExampleText = current ? (studyReversed ? current.exampleBack : current.exampleFront) : null;
+  const backExampleText = current ? (studyReversed ? current.exampleFront : current.exampleBack) : null;
   const frontExampleVisible =
     !!current && examplesEnabled && showExamplesOnFront && !!frontExampleText?.trim();
   const backExampleVisible =

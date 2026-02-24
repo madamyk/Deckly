@@ -41,15 +41,15 @@ export function CardEditorScreen(props: {
   const [card, setCard] = useState<Card | null>(null);
   const [initialFront, setInitialFront] = useState('');
   const [initialBack, setInitialBack] = useState('');
-  const [initialExampleL1, setInitialExampleL1] = useState('');
-  const [initialExampleL2, setInitialExampleL2] = useState('');
+  const [initialexampleFront, setInitialexampleFront] = useState('');
+  const [initialexampleBack, setInitialexampleBack] = useState('');
   const [initialExampleNote, setInitialExampleNote] = useState('');
   const [initialExampleSource, setInitialExampleSource] = useState<ExampleSource | null>(null);
   const [initialExampleGeneratedAt, setInitialExampleGeneratedAt] = useState<number | null>(null);
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
-  const [exampleL1, setExampleL1] = useState('');
-  const [exampleL2, setExampleL2] = useState('');
+  const [exampleFront, setexampleFront] = useState('');
+  const [exampleBack, setexampleBack] = useState('');
   const [exampleNote, setExampleNote] = useState('');
   const [exampleSource, setExampleSource] = useState<ExampleSource | null>(null);
   const [exampleGeneratedAt, setExampleGeneratedAt] = useState<number | null>(null);
@@ -97,20 +97,20 @@ export function CardEditorScreen(props: {
     setCard(cardRecord);
     const frontValue = cardRecord?.front ?? '';
     const backValue = cardRecord?.back ?? '';
-    const exampleFrontValue = cardRecord?.exampleL1 ?? '';
-    const exampleBackValue = cardRecord?.exampleL2 ?? '';
+    const exampleFrontValue = cardRecord?.exampleFront ?? '';
+    const exampleBackValue = cardRecord?.exampleBack ?? '';
     const exampleNoteValue = cardRecord?.exampleNote ?? '';
     setInitialFront(frontValue);
     setInitialBack(backValue);
-    setInitialExampleL1(exampleFrontValue);
-    setInitialExampleL2(exampleBackValue);
+    setInitialexampleFront(exampleFrontValue);
+    setInitialexampleBack(exampleBackValue);
     setInitialExampleNote(exampleNoteValue);
     setInitialExampleSource(cardRecord?.exampleSource ?? null);
     setInitialExampleGeneratedAt(cardRecord?.exampleGeneratedAt ?? null);
     setFront(frontValue);
     setBack(backValue);
-    setExampleL1(exampleFrontValue);
-    setExampleL2(exampleBackValue);
+    setexampleFront(exampleFrontValue);
+    setexampleBack(exampleBackValue);
     setExampleNote(exampleNoteValue);
     setExampleSource(cardRecord?.exampleSource ?? null);
     setExampleGeneratedAt(cardRecord?.exampleGeneratedAt ?? null);
@@ -138,16 +138,16 @@ export function CardEditorScreen(props: {
 
   const isDirty =
     props.mode === 'create'
-      ? front.length > 0 || back.length > 0 || exampleL1.length > 0 || exampleL2.length > 0 || exampleNote.length > 0
+      ? front.length > 0 || back.length > 0 || exampleFront.length > 0 || exampleBack.length > 0 || exampleNote.length > 0
       : front !== initialFront ||
       back !== initialBack ||
-      exampleL1 !== initialExampleL1 ||
-      exampleL2 !== initialExampleL2 ||
+      exampleFront !== initialexampleFront ||
+      exampleBack !== initialexampleBack ||
       exampleNote !== initialExampleNote ||
       exampleSource !== initialExampleSource ||
       exampleGeneratedAt !== initialExampleGeneratedAt;
   const canSave = !saving && isDirty && front.trim().length > 0 && back.trim().length > 0;
-  const hasExampleContent = !!(exampleL1.trim() || exampleL2.trim() || exampleNote.trim());
+  const hasExampleContent = !!(exampleFront.trim() || exampleBack.trim() || exampleNote.trim());
   const canGenerate = front.trim().length > 0 && back.trim().length > 0;
   const optionalInputStyle = styles.optionalInput;
   const accentProgress = accentColor ?? theme.colors.primary2;
@@ -167,10 +167,10 @@ export function CardEditorScreen(props: {
     }
     setSaving(true);
     try {
-      const exampleFront = exampleL1.trim() ? exampleL1.trim() : null;
-      const exampleBack = exampleL2.trim() ? exampleL2.trim() : null;
+      const exampleFrontText = exampleFront.trim() ? exampleFront.trim() : null;
+      const exampleBackText = exampleBack.trim() ? exampleBack.trim() : null;
       const exampleNoteText = exampleNote.trim() ? exampleNote.trim() : null;
-      const hasAnyExample = !!(exampleFront || exampleBack || exampleNoteText);
+      const hasAnyExample = !!(exampleFrontText || exampleBackText || exampleNoteText);
       const source: ExampleSource | null = hasAnyExample ? (exampleSource ?? 'user') : null;
       const generatedAt = source === 'ai' ? exampleGeneratedAt ?? nowMs() : null;
 
@@ -179,8 +179,8 @@ export function CardEditorScreen(props: {
           deckId: props.deckId,
           front: frontText,
           back: backText,
-          exampleL1: exampleFront,
-          exampleL2: exampleBack,
+          exampleFront: exampleFrontText,
+          exampleBack: exampleBackText,
           exampleNote: exampleNoteText,
           exampleSource: source,
           exampleGeneratedAt: generatedAt,
@@ -191,8 +191,8 @@ export function CardEditorScreen(props: {
         await cardsRepo.updateCard(props.cardId, {
           front: frontText,
           back: backText,
-          exampleL1: exampleFront,
-          exampleL2: exampleBack,
+          exampleFront: exampleFrontText,
+          exampleBack: exampleBackText,
           exampleNote: exampleNoteText,
           exampleSource: source,
           exampleGeneratedAt: generatedAt,
@@ -231,8 +231,8 @@ export function CardEditorScreen(props: {
         frontText,
         backText,
       });
-      setExampleL1(patch.exampleL1 ?? '');
-      setExampleL2(patch.exampleL2 ?? '');
+      setexampleFront(patch.exampleFront ?? '');
+      setexampleBack(patch.exampleBack ?? '');
       setExampleNote(patch.exampleNote ?? '');
       setExampleSource('ai');
       setExampleGeneratedAt(patch.exampleGeneratedAt ?? nowMs());
@@ -362,8 +362,8 @@ export function CardEditorScreen(props: {
   function reverseFields() {
     setFront(back);
     setBack(front);
-    setExampleL1(exampleL2);
-    setExampleL2(exampleL1);
+    setexampleFront(exampleBack);
+    setexampleBack(exampleFront);
   }
 
   return (
@@ -439,9 +439,9 @@ export function CardEditorScreen(props: {
             >
               <Input
                 label="Example front"
-                value={exampleL1}
+                value={exampleFront}
                 onChangeText={(v) => {
-                  setExampleL1(v);
+                  setexampleFront(v);
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Example on the front side"
@@ -451,9 +451,9 @@ export function CardEditorScreen(props: {
               />
               <Input
                 label="Example back"
-                value={exampleL2}
+                value={exampleBack}
                 onChangeText={(v) => {
-                  setExampleL2(v);
+                  setexampleBack(v);
                   if (!exampleSource) setExampleSource('user');
                 }}
                 placeholder="Example on the back side"

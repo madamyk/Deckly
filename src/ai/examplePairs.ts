@@ -276,12 +276,12 @@ export function parseAndValidateExampleBatchJSON(
 export function applyExampleToCardPatch(
   pair: ExamplePair,
   params?: { source?: ExampleSource; now?: number },
-): Partial<Pick<Card, 'exampleL1' | 'exampleL2' | 'exampleNote' | 'exampleSource' | 'exampleGeneratedAt'>> {
+): Partial<Pick<Card, 'exampleFront' | 'exampleBack' | 'exampleNote' | 'exampleSource' | 'exampleGeneratedAt'>> {
   const source = params?.source ?? 'ai';
   const now = params?.now ?? nowMs();
   return {
-    exampleL1: pair.exampleFront,
-    exampleL2: pair.exampleBack,
+    exampleFront: pair.exampleFront,
+    exampleBack: pair.exampleBack,
     exampleNote: pair.note ? pair.note : null,
     exampleSource: source,
     exampleGeneratedAt: source === 'ai' ? now : null,
