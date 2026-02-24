@@ -306,6 +306,7 @@ export default function CardChatScreen() {
                     ]}
                   >
                     <Text
+                      selectable
                       style={isUser ? styles.userMessageText : styles.assistantMessageText}
                     >
                       {m.text}

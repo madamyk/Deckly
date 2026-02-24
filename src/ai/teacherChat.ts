@@ -7,6 +7,8 @@ export function buildTeacherSystemPrompt(params: {
   extraInstruction?: string | null;
 }) {
 
+  const { front, back, exampleFront, exampleBack, exampleNote } = params.card;
+
   const extra = params.extraInstruction?.trim()
     ? `Additional instruction: ${params.extraInstruction.trim()}`
     : '';
@@ -14,7 +16,9 @@ export function buildTeacherSystemPrompt(params: {
   return [
     `You are a helpful language teacher.`,
     `You answer questions about a flashcard term.`,
-    `Card data: ${JSON.stringify(params.card)}`,
+    `Card data: ${JSON.stringify({
+      front, back, exampleFront, exampleBack, exampleNote
+    })}`,
     `Respond in ${params.front_language} unless specifically asked to speak another language.`,
     `Be concise (2–6 sentences).`,
     `If the user asks for examples, provide 1–2 short examples in ${params.back_language} and include ${params.front_language} translations.`,

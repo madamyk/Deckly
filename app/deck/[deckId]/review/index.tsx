@@ -321,6 +321,7 @@ export default function ReviewScreen() {
         <Pressable
           onPress={() => {
             softHaptic();
+            resumeRef.current = true;
             router.push({
               pathname: '/deck/[deckId]/cards/[cardId]',
               params: { deckId: current.deckId, cardId: current.id },
