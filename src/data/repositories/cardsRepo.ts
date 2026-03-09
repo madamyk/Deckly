@@ -1,5 +1,6 @@
 import { getDb } from '@/data/db';
 import type { Card, CardState, ExampleSource } from '@/domain/models';
+import type { ReviewDirection } from '@/domain/scheduling/reviewDirection';
 import type { CardPatch } from '@/domain/scheduling/schedule';
 import { makeId } from '@/utils/id';
 import { nowMs } from '@/utils/time';
@@ -23,6 +24,10 @@ function mapCardRow(row: any): Card {
     reps: Number(row.reps),
     lapses: Number(row.lapses),
     learningStepIndex: Number(row.learningStepIndex),
+    forwardSeen: Number(row.forwardSeen ?? 0),
+    forwardPassed: Number(row.forwardPassed ?? 0),
+    reverseSeen: Number(row.reverseSeen ?? 0),
+    reversePassed: Number(row.reversePassed ?? 0),
 
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
@@ -89,6 +94,10 @@ export async function createCard(params: {
     reps: 0,
     lapses: 0,
     learningStepIndex: 0,
+    forwardSeen: 0,
+    forwardPassed: 0,
+    reverseSeen: 0,
+    reversePassed: 0,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
@@ -100,8 +109,9 @@ export async function createCard(params: {
       id, deckId, front, back,
       exampleFront, exampleBack, exampleNote, exampleSource, exampleGeneratedAt,
       state, dueAt, intervalDays, ease, reps, lapses, learningStepIndex,
+      forwardSeen, forwardPassed, reverseSeen, reversePassed,
       createdAt, updatedAt, deletedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
   `,
     [
       card.id,
@@ -120,6 +130,10 @@ export async function createCard(params: {
       card.reps,
       card.lapses,
       card.learningStepIndex,
+      card.forwardSeen,
+      card.forwardPassed,
+      card.reverseSeen,
+      card.reversePassed,
       card.createdAt,
       card.updatedAt,
     ],
@@ -298,6 +312,44 @@ export async function applyScheduling(cardId: string, patch: CardPatch): Promise
   await db.runAsync(`UPDATE cards SET ${updates.join(', ')} WHERE id = ?;`, values);
 }
 
+export async function recordDirectionReview(
+  cardId: string,
+  direction: ReviewDirection,
+  passed: boolean,
+): Promise<void> {
+  const db = await getDb();
+  const seenColumn = direction === 'forward' ? 'forwardSeen' : 'reverseSeen';
+  const passedColumn = direction === 'forward' ? 'forwardPassed' : 'reversePassed';
+
+  await db.runAsync(
+    `
+    UPDATE cards
+    SET ${seenColumn} = ${seenColumn} + 1,
+        ${passedColumn} = ${passedColumn} + ?
+    WHERE id = ?;
+  `,
+    [passed ? 1 : 0, cardId],
+  );
+}
+
+export async function applyDirectionStats(
+  cardId: string,
+  stats: Pick<Card, 'forwardSeen' | 'forwardPassed' | 'reverseSeen' | 'reversePassed'>,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `
+    UPDATE cards
+    SET forwardSeen = ?,
+        forwardPassed = ?,
+        reverseSeen = ?,
+        reversePassed = ?
+    WHERE id = ?;
+  `,
+    [stats.forwardSeen, stats.forwardPassed, stats.reverseSeen, stats.reversePassed, cardId],
+  );
+}
+
 export async function getCardKeySet(deckId: string): Promise<Set<string>> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ front: string; back: string }>(
@@ -337,8 +389,9 @@ export async function createManyCards(params: {
         id, deckId, front, back,
         exampleFront, exampleBack, exampleNote, exampleSource, exampleGeneratedAt,
         state, dueAt, intervalDays, ease, reps, lapses, learningStepIndex,
+        forwardSeen, forwardPassed, reverseSeen, reversePassed,
         createdAt, updatedAt, deletedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
     `,
     );
     try {
@@ -369,6 +422,10 @@ export async function createManyCards(params: {
           0, // reps
           0, // lapses
           0, // learningStepIndex
+          0, // forwardSeen
+          0, // forwardPassed
+          0, // reverseSeen
+          0, // reversePassed
           now, // createdAt
           now, // updatedAt
         ]);

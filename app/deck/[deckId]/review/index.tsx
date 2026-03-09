@@ -8,9 +8,9 @@ import * as cardsRepo from '@/data/repositories/cardsRepo';
 import {
   getDailyReviewLimit,
   getNewCardsPerSession,
+  getReverseRate,
   getShowExamplesOnBack,
   getShowExamplesOnFront,
-  getStudyReversed,
 } from '@/data/repositories/deckPrefsRepo';
 import { addDeckReviewedToday } from '@/data/repositories/reviewProgressRepo';
 import { listDeckIdsByTag } from '@/data/repositories/tagsRepo';
@@ -21,6 +21,8 @@ import {
   DEFAULT_DAILY_REVIEW_LIMIT,
   DEFAULT_NEW_CARDS_PER_SESSION,
 } from '@/domain/scheduling/constants';
+import type { ReviewDirection, ReviewQueueItem } from '@/domain/scheduling/reviewDirection';
+import { toReviewQueueItems } from '@/domain/scheduling/reviewDirection';
 import { schedule } from '@/domain/scheduling/schedule';
 import { pickDueCardsForQueue, upsertReinforcementCard } from '@/domain/scheduling/sessionQueue';
 import { usePrefsStore } from '@/stores/prefsStore';
@@ -48,13 +50,13 @@ export default function ReviewScreen() {
   const reviewScope: 'deck' | 'tag' | null = normalizedDeckId ? 'deck' : normalizedTag ? 'tag' : null;
   const screenTitle = reviewScope === 'tag' ? `Tag: ${normalizedTag}` : 'Review';
 
-  const [queue, setQueue] = useState<Card[]>([]);
+  const [queue, setQueue] = useState<ReviewQueueItem[]>([]);
   const [index, setIndex] = useState(0);
   const [flippedId, setFlippedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [examplesEnabled, setExamplesEnabled] = useState(true);
   const [animateExamples, setAnimateExamples] = useState(false);
-  const [studyReversed, setStudyReversed] = useState(false);
+  const [reverseRate, setReverseRate] = useState(0);
   const [showExamplesOnFront, setShowExamplesOnFront] = useState(true);
   const [showExamplesOnBack, setShowExamplesOnBack] = useState(true);
   const [newCardsPerSession, setNewCardsPerSession] = useState(DEFAULT_NEW_CARDS_PER_SESSION);
@@ -67,7 +69,7 @@ export default function ReviewScreen() {
     {
       cardId: string;
       prevIndex: number;
-      prevQueue: Card[];
+      prevQueue: ReviewQueueItem[];
       prevReviewedCardIds: string[];
       prevIntroducedNewCount: number;
       prevReviewedCount: number;
@@ -82,6 +84,10 @@ export default function ReviewScreen() {
         learningStepIndex: number;
         updatedAt: number;
       };
+      prevDirectionStats: Pick<
+        Card,
+        'forwardSeen' | 'forwardPassed' | 'reverseSeen' | 'reversePassed'
+      >;
     }[]
   >([]);
 
@@ -104,11 +110,13 @@ export default function ReviewScreen() {
       preserve?: boolean;
       newCardsPerSession?: number;
       dailyReviewLimit?: number;
+      reverseRate?: number;
     }) => {
       const preserve = !!opts?.preserve;
       if (preserve) return;
       const effectiveNewCardsPerSession = opts?.newCardsPerSession ?? newCardsPerSession;
       const effectiveDailyReviewLimit = opts?.dailyReviewLimit ?? dailyReviewLimit;
+      const effectiveReverseRate = opts?.reverseRate ?? reverseRate;
 
       const due = await fetchDueCards(DUE_FETCH_LIMIT);
       const selected = pickDueCardsForQueue({
@@ -120,7 +128,7 @@ export default function ReviewScreen() {
         maxCardsToPick: effectiveDailyReviewLimit <= 0 ? undefined : effectiveDailyReviewLimit,
       });
 
-      setQueue(selected.picked);
+      setQueue(toReviewQueueItems(selected.picked, effectiveReverseRate));
       setIntroducedNewCount(selected.introducedNewCount);
       setReviewedCardIds([]);
       setReviewedCount(0);
@@ -128,7 +136,7 @@ export default function ReviewScreen() {
       setFlippedId(null);
       setHistory([]);
     },
-    [dailyReviewLimit, fetchDueCards, newCardsPerSession],
+    [dailyReviewLimit, fetchDueCards, newCardsPerSession, reverseRate],
   );
 
   useFocusEffect(
@@ -136,13 +144,13 @@ export default function ReviewScreen() {
       const preserve = resumeRef.current;
       resumeRef.current = false;
       (async () => {
-        let reversed = false;
+        let nextReverseRate = 0;
         let showFront = true;
         let showBack = true;
         let newLimit = DEFAULT_NEW_CARDS_PER_SESSION;
         let dailyLimit = DEFAULT_DAILY_REVIEW_LIMIT;
         if (reviewScope === 'deck' && normalizedDeckId) {
-          reversed = await getStudyReversed(normalizedDeckId);
+          nextReverseRate = await getReverseRate(normalizedDeckId);
           showFront = await getShowExamplesOnFront(normalizedDeckId);
           showBack = await getShowExamplesOnBack(normalizedDeckId);
           newLimit = await getNewCardsPerSession(normalizedDeckId);
@@ -158,7 +166,7 @@ export default function ReviewScreen() {
             dailyLimit = 0;
           }
         }
-        setStudyReversed(reversed);
+        setReverseRate(nextReverseRate);
         setShowExamplesOnFront(showFront);
         setShowExamplesOnBack(showBack);
         setNewCardsPerSession(newLimit);
@@ -167,6 +175,7 @@ export default function ReviewScreen() {
           preserve,
           newCardsPerSession: newLimit,
           dailyReviewLimit: dailyLimit,
+          reverseRate: nextReverseRate,
         });
       })();
     }, [load, normalizedDeckId, reviewScope]),
@@ -179,16 +188,27 @@ export default function ReviewScreen() {
   }, [animateExamples]);
 
   const current = queue[index] ?? null;
+  const currentCard = current?.card ?? null;
+  const currentDirection = current?.direction ?? (reverseRate >= 100 ? 'reverse' : 'forward');
+  const showingReverse = currentDirection === 'reverse';
   const flipped = !!current && flippedId === current.id;
-  const frontText = current ? (studyReversed ? current.back : current.front) : '';
-  const backText = current ? (studyReversed ? current.front : current.back) : '';
-  const frontExampleText = current ? (studyReversed ? current.exampleBack : current.exampleFront) : null;
-  const backExampleText = current ? (studyReversed ? current.exampleFront : current.exampleBack) : null;
+  const frontText = currentCard ? (showingReverse ? currentCard.back : currentCard.front) : '';
+  const backText = currentCard ? (showingReverse ? currentCard.front : currentCard.back) : '';
+  const frontExampleText = currentCard
+    ? showingReverse
+      ? currentCard.exampleBack
+      : currentCard.exampleFront
+    : null;
+  const backExampleText = currentCard
+    ? showingReverse
+      ? currentCard.exampleFront
+      : currentCard.exampleBack
+    : null;
   const frontExampleVisible =
     !!current && examplesEnabled && showExamplesOnFront && !!frontExampleText?.trim();
   const backExampleVisible =
     !!current && examplesEnabled && showExamplesOnBack && !!backExampleText?.trim();
-  const note = current?.exampleNote?.trim() ? current.exampleNote.trim() : null;
+  const note = currentCard?.exampleNote?.trim() ? currentCard.exampleNote.trim() : null;
   const noteVisible = examplesEnabled && !!note;
   const noteAnimate = animateExamples;
   const dailyTarget = dailyReviewLimit > 0 ? dailyReviewLimit : null;
@@ -198,45 +218,57 @@ export default function ReviewScreen() {
   }, [dailyTarget, reviewedCount]);
 
   async function rate(rating: Rating) {
-    if (!current) return;
+    if (!current || !currentCard) return;
     if (!flipped) return;
     setLoading(true);
     try {
       const now = nowMs();
       // Snapshot scheduling fields so we can undo a mis-tap.
       const undoEntry = {
-        cardId: current.id,
+        cardId: currentCard.id,
         prevIndex: index,
         prevQueue: queue,
         prevReviewedCardIds: reviewedCardIds,
         prevIntroducedNewCount: introducedNewCount,
         prevReviewedCount: reviewedCount,
-        deckId: current.deckId,
+        deckId: currentCard.deckId,
         prevScheduling: {
-          state: current.state,
-          dueAt: current.dueAt,
-          intervalDays: current.intervalDays,
-          ease: current.ease,
-          reps: current.reps,
-          lapses: current.lapses,
-          learningStepIndex: current.learningStepIndex,
-          updatedAt: current.updatedAt,
+          state: currentCard.state,
+          dueAt: currentCard.dueAt,
+          intervalDays: currentCard.intervalDays,
+          ease: currentCard.ease,
+          reps: currentCard.reps,
+          lapses: currentCard.lapses,
+          learningStepIndex: currentCard.learningStepIndex,
+          updatedAt: currentCard.updatedAt,
+        },
+        prevDirectionStats: {
+          forwardSeen: currentCard.forwardSeen,
+          forwardPassed: currentCard.forwardPassed,
+          reverseSeen: currentCard.reverseSeen,
+          reversePassed: currentCard.reversePassed,
         },
       } as const;
 
-      const patch = schedule(current, rating, now);
-      await cardsRepo.applyScheduling(current.id, patch);
-      await addDeckReviewedToday(current.deckId, 1, now);
+      const passed = rating !== 'again';
+      const patch = schedule(currentCard, rating, now);
+      await cardsRepo.applyScheduling(currentCard.id, patch);
+      await cardsRepo.recordDirectionReview(currentCard.id, current.direction, passed);
+      await addDeckReviewedToday(currentCard.deckId, 1, now);
       await successHaptic();
-      const updatedCurrent = { ...current, ...patch };
-      let nextQueue = queue.map((card, cardIndex) =>
-        cardIndex === index ? updatedCurrent : card,
+      const updatedCurrentCard = applyDirectionReviewToCard(
+        { ...currentCard, ...patch },
+        current.direction,
+        passed,
+      );
+      let nextQueue = queue.map((item, cardIndex) =>
+        cardIndex === index ? { ...item, card: updatedCurrentCard } : item,
       );
       if (rating === 'again') {
         nextQueue = upsertReinforcementCard({
           queue: nextQueue,
           afterIndex: index,
-          card: updatedCurrent,
+          card: { ...current, card: updatedCurrentCard },
           afterCards: DEFAULT_AGAIN_REINSERT_AFTER_CARDS,
         });
       }
@@ -251,19 +283,24 @@ export default function ReviewScreen() {
         const due = await fetchDueCards(DUE_FETCH_LIMIT);
         const refill = pickDueCardsForQueue({
           dueCards: due,
-          queuedIds: new Set(nextQueue.slice(nextIndex).map((card) => card.id)),
-          reviewedIds: new Set([...reviewedCardIds, current.id]),
+          queuedIds: new Set(nextQueue.slice(nextIndex).map((item) => item.id)),
+          reviewedIds: new Set([...reviewedCardIds, currentCard.id]),
           introducedNewCount,
           newCardsPerSession,
           maxCardsToPick: dailyTarget - nextReviewedCount - remainingQueueCount,
         });
         nextIntroducedCount = refill.introducedNewCount;
-        if (refill.picked.length) nextQueue = [...nextQueue, ...refill.picked];
+        if (refill.picked.length) {
+          nextQueue = [
+            ...nextQueue,
+            ...toReviewQueueItems(refill.picked, reverseRate),
+          ];
+        }
       }
 
       setHistory((h) => [...h, undoEntry]);
       setQueue(nextQueue);
-      setReviewedCardIds((ids) => [...ids, current.id]);
+      setReviewedCardIds((ids) => [...ids, currentCard.id]);
       setReviewedCount(nextReviewedCount);
       setIntroducedNewCount(nextIntroducedCount);
       setFlippedId(null);
@@ -282,6 +319,7 @@ export default function ReviewScreen() {
     setLoading(true);
     try {
       await cardsRepo.applyScheduling(last.cardId, last.prevScheduling);
+      await cardsRepo.applyDirectionStats(last.cardId, last.prevDirectionStats);
       await addDeckReviewedToday(last.deckId, -1);
       setQueue(last.prevQueue);
       setReviewedCardIds(last.prevReviewedCardIds);
@@ -324,7 +362,7 @@ export default function ReviewScreen() {
             resumeRef.current = true;
             router.push({
               pathname: '/deck/[deckId]/cards/[cardId]',
-              params: { deckId: current.deckId, cardId: current.id },
+              params: { deckId: currentCard!.deckId, cardId: currentCard!.id },
             });
           }}
           hitSlop={12}
@@ -367,7 +405,7 @@ export default function ReviewScreen() {
     );
   }
 
-  if (!current) {
+  if (!current || !currentCard) {
     return (
       <Screen edges={['left', 'right', 'bottom']}>
         <Stack.Screen
@@ -407,8 +445,8 @@ export default function ReviewScreen() {
           </Text>
           <Row gap={10} style={styles.progressActions}>
             <Pill
-              label={cardStateLabel(current.state)}
-              tone={cardStateTone(current.state)}
+              label={cardStateLabel(currentCard.state)}
+              tone={cardStateTone(currentCard.state)}
               style={styles.progressPill}
             />
           </Row>
@@ -499,7 +537,7 @@ export default function ReviewScreen() {
                 resumeRef.current = true;
                 router.push({
                   pathname: '/deck/[deckId]/review/chat/[cardId]',
-                  params: { deckId: current.deckId, cardId: current.id },
+                  params: { deckId: currentCard!.deckId, cardId: currentCard!.id },
                 });
               }}
             />
@@ -547,6 +585,26 @@ export default function ReviewScreen() {
       </Animated.View>
     </Screen>
   );
+}
+
+function applyDirectionReviewToCard(
+  card: Card,
+  direction: ReviewDirection,
+  passed: boolean,
+): Card {
+  if (direction === 'forward') {
+    return {
+      ...card,
+      forwardSeen: card.forwardSeen + 1,
+      forwardPassed: card.forwardPassed + (passed ? 1 : 0),
+    };
+  }
+
+  return {
+    ...card,
+    reverseSeen: card.reverseSeen + 1,
+    reversePassed: card.reversePassed + (passed ? 1 : 0),
+  };
 }
 
 function ExampleFooter(props: {

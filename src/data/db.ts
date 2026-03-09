@@ -5,7 +5,7 @@ export type DecklyDb = SQLite.SQLiteDatabase;
 let dbPromise: Promise<DecklyDb> | null = null;
 
 // Production-safe schema versioning: migrate forward, never wipe user data.
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 export async function getDb(): Promise<DecklyDb> {
   if (!dbPromise) {
@@ -57,6 +57,10 @@ async function ensureCoreSchema(db: DecklyDb): Promise<void> {
       reps INTEGER NOT NULL DEFAULT 0,
       lapses INTEGER NOT NULL DEFAULT 0,
       learningStepIndex INTEGER NOT NULL DEFAULT 0,
+      forwardSeen INTEGER NOT NULL DEFAULT 0,
+      forwardPassed INTEGER NOT NULL DEFAULT 0,
+      reverseSeen INTEGER NOT NULL DEFAULT 0,
+      reversePassed INTEGER NOT NULL DEFAULT 0,
 
       createdAt INTEGER NOT NULL,
       updatedAt INTEGER NOT NULL,
@@ -115,6 +119,24 @@ async function migrateToV5RenameCardExampleColumns(db: DecklyDb): Promise<void> 
   }
 }
 
+async function migrateToV6AddReviewDirectionStats(db: DecklyDb): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(cards);');
+  const columnNames = new Set(columns.map((column) => String(column.name)));
+
+  if (!columnNames.has('forwardSeen')) {
+    await db.execAsync('ALTER TABLE cards ADD COLUMN forwardSeen INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!columnNames.has('forwardPassed')) {
+    await db.execAsync('ALTER TABLE cards ADD COLUMN forwardPassed INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!columnNames.has('reverseSeen')) {
+    await db.execAsync('ALTER TABLE cards ADD COLUMN reverseSeen INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!columnNames.has('reversePassed')) {
+    await db.execAsync('ALTER TABLE cards ADD COLUMN reversePassed INTEGER NOT NULL DEFAULT 0;');
+  }
+}
+
 async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
   await db.execAsync('BEGIN;');
   try {
@@ -123,6 +145,7 @@ async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
       await ensureCoreSchema(db);
       await migrateToV4AddTags(db);
       await migrateToV5RenameCardExampleColumns(db);
+      await migrateToV6AddReviewDirectionStats(db);
       await setUserVersion(db, SCHEMA_VERSION);
       await db.execAsync('COMMIT;');
       return;
@@ -136,6 +159,9 @@ async function migrate(db: DecklyDb, fromVersion: number): Promise<void> {
     }
     if (fromVersion < 5) {
       await migrateToV5RenameCardExampleColumns(db);
+    }
+    if (fromVersion < 6) {
+      await migrateToV6AddReviewDirectionStats(db);
     }
 
     await setUserVersion(db, SCHEMA_VERSION);

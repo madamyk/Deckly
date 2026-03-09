@@ -28,6 +28,10 @@ export type Card = {
   reps: number;
   lapses: number;
   learningStepIndex: number;
+  forwardSeen: number;
+  forwardPassed: number;
+  reverseSeen: number;
+  reversePassed: number;
 
   createdAt: number;
   updatedAt: number;

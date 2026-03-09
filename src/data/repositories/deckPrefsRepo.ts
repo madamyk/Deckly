@@ -12,12 +12,29 @@ import {
 type DeckPrefs = {
   secondaryLanguage?: string | null;
   exampleLevel?: AiExampleLevel | null;
+  reverseRate?: number;
   studyReversed?: boolean;
   showExamplesOnFront?: boolean;
   showExamplesOnBack?: boolean;
   newCardsPerSession?: number;
   dailyReviewLimit?: number;
 };
+
+const SUPPORTED_REVERSE_RATES = [0, 25, 50, 100] as const;
+
+function clampReverseRate(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  let closest: number = SUPPORTED_REVERSE_RATES[0];
+  let smallestDiff = Math.abs(value - closest);
+  for (const candidate of SUPPORTED_REVERSE_RATES.slice(1)) {
+    const diff = Math.abs(value - candidate);
+    if (diff < smallestDiff) {
+      closest = candidate;
+      smallestDiff = diff;
+    }
+  }
+  return closest;
+}
 
 function key(deckId: string): string {
   return `deck.prefs.v1.${deckId}`;
@@ -36,6 +53,13 @@ export async function getDeckPrefs(deckId: string): Promise<DeckPrefs> {
   if (!raw) return {};
   const obj = safeParse(raw);
   if (!obj || typeof obj !== 'object') return {};
+  const legacyStudyReversed = typeof obj.studyReversed === 'boolean' ? obj.studyReversed : null;
+  const reverseRate =
+    typeof obj.reverseRate === 'number'
+      ? clampReverseRate(obj.reverseRate)
+      : legacyStudyReversed
+        ? 100
+        : 0;
   return {
     secondaryLanguage:
       typeof obj.secondaryLanguage === 'string' ? obj.secondaryLanguage.trim() : null,
@@ -45,7 +69,8 @@ export async function getDeckPrefs(deckId: string): Promise<DeckPrefs> {
       obj.exampleLevel === 'advanced'
         ? obj.exampleLevel
         : null,
-    studyReversed: typeof obj.studyReversed === 'boolean' ? obj.studyReversed : false,
+    reverseRate,
+    studyReversed: legacyStudyReversed ?? reverseRate === 100,
     showExamplesOnFront:
       typeof obj.showExamplesOnFront === 'boolean' ? obj.showExamplesOnFront : true,
     showExamplesOnBack:
@@ -80,16 +105,19 @@ export async function getExampleLevel(deckId: string): Promise<AiExampleLevel | 
   return prefs.exampleLevel ?? null;
 }
 
-export async function getStudyReversed(deckId: string): Promise<boolean> {
+export async function getReverseRate(deckId: string): Promise<number> {
   const prefs = await getDeckPrefs(deckId);
-  return !!prefs.studyReversed;
+  return clampReverseRate(prefs.reverseRate ?? 0);
 }
 
-export async function setStudyReversed(deckId: string, value: boolean): Promise<void> {
+export async function setReverseRate(deckId: string, value: number): Promise<void> {
   const prefs = await getDeckPrefs(deckId);
+  const reverseRate = clampReverseRate(value);
   const next: DeckPrefs = {
     ...prefs,
-    studyReversed: !!value,
+    reverseRate,
+    // Keep the legacy field in sync for users upgrading across versions.
+    studyReversed: reverseRate === 100,
   };
   await appSettingsRepo.setSetting(key(deckId), JSON.stringify(next));
 }

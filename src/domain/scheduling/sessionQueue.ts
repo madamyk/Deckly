@@ -74,12 +74,12 @@ export function pickDueCardsForQueue(params: {
   };
 }
 
-export function upsertReinforcementCard(params: {
-  queue: Card[];
+export function upsertReinforcementCard<T extends { id: string }>(params: {
+  queue: T[];
   afterIndex: number;
-  card: Card;
+  card: T;
   afterCards: number;
-}): Card[] {
+}): T[] {
   const next = [...params.queue];
   const existingIndex = next.findIndex(
     (candidate, idx) => idx > params.afterIndex && candidate.id === params.card.id,

@@ -1,16 +1,16 @@
 import {
   getDailyReviewLimit,
   getNewCardsPerSession,
+  getReverseRate,
   getSecondaryLanguage,
   getShowExamplesOnBack,
   getShowExamplesOnFront,
-  getStudyReversed,
   setDailyReviewLimit,
   setNewCardsPerSession,
+  setReverseRate,
   setSecondaryLanguage,
   setShowExamplesOnBack,
   setShowExamplesOnFront,
-  setStudyReversed,
 } from '@/data/repositories/deckPrefsRepo';
 import { getDeck, getDeckStats } from '@/data/repositories/decksRepo';
 import { getDeckTags, setDeckTags } from '@/data/repositories/tagsRepo';
@@ -31,7 +31,6 @@ import { Input } from '@/ui/components/Input';
 import { Row } from '@/ui/components/Row';
 import { Screen } from '@/ui/components/Screen';
 import { Text } from '@/ui/components/Text';
-import { TogglePill } from '@/ui/components/TogglePill';
 import { ToggleRow } from '@/ui/components/ToggleRow';
 import { useKeyboardVisible } from '@/ui/hooks/useKeyboardVisible';
 import { DECK_ACCENTS, resolveDeckAccentColor } from '@/ui/theme/deckAccents';
@@ -40,10 +39,11 @@ import { nowMs } from '@/utils/time';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type PacingInfoKey = 'newCards' | 'dailyLimit';
+type PacingInfoKey = 'newCards' | 'dailyLimit' | 'reverseRate';
+const REVERSE_RATE_OPTIONS = [0, 25, 50, 100] as const;
 
 export function DeckSettingsScreen(props: { deckId: string }) {
   const theme = useDecklyTheme();
@@ -58,8 +58,8 @@ export function DeckSettingsScreen(props: { deckId: string }) {
   const [accentKey, setAccentKey] = useState<string>('');
   const [secondaryLanguage, setSecondaryLanguageState] = useState<string | null>(null);
   const [savedSecondaryLanguage, setSavedSecondaryLanguage] = useState<string | null>(null);
-  const [studyReversed, setStudyReversedState] = useState(false);
-  const [savedStudyReversed, setSavedStudyReversed] = useState(false);
+  const [reverseRate, setReverseRateState] = useState(0);
+  const [savedReverseRate, setSavedReverseRate] = useState(0);
   const [showExamplesOnFront, setShowExamplesOnFrontState] = useState(true);
   const [savedShowExamplesOnFront, setSavedShowExamplesOnFront] = useState(true);
   const [showExamplesOnBack, setShowExamplesOnBackState] = useState(true);
@@ -72,7 +72,6 @@ export function DeckSettingsScreen(props: { deckId: string }) {
   const [tagsDirty, setTagsDirty] = useState(false);
   const tagsLoadedRef = useRef(false);
   const tagsRef = useRef<string[]>([]);
-  const [studyReversedInfoOpen, setStudyReversedInfoOpen] = useState(false);
   const [pacingInfoOpen, setPacingInfoOpen] = useState<PacingInfoKey | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -89,9 +88,9 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     const secondary = await getSecondaryLanguage(props.deckId);
     setSecondaryLanguageState(secondary);
     setSavedSecondaryLanguage(secondary);
-    const reversed = await getStudyReversed(props.deckId);
-    setStudyReversedState(reversed);
-    setSavedStudyReversed(reversed);
+    const nextReverseRate = await getReverseRate(props.deckId);
+    setReverseRateState(nextReverseRate);
+    setSavedReverseRate(nextReverseRate);
     const showFront = await getShowExamplesOnFront(props.deckId);
     setShowExamplesOnFrontState(showFront);
     setSavedShowExamplesOnFront(showFront);
@@ -138,7 +137,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       trimmed !== deck.name ||
       accentKey !== deck.accentColor ||
       (secondaryLanguage ?? null) !== (savedSecondaryLanguage ?? null) ||
-      studyReversed !== savedStudyReversed ||
+      reverseRate !== savedReverseRate ||
       showExamplesOnFront !== savedShowExamplesOnFront ||
       showExamplesOnBack !== savedShowExamplesOnBack ||
       tagsDirty ||
@@ -151,8 +150,8 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     deck,
     secondaryLanguage,
     savedSecondaryLanguage,
-    studyReversed,
-    savedStudyReversed,
+    reverseRate,
+    savedReverseRate,
     showExamplesOnFront,
     savedShowExamplesOnFront,
     showExamplesOnBack,
@@ -175,7 +174,7 @@ export function DeckSettingsScreen(props: { deckId: string }) {
     try {
       await updateDeck(deck.id, { name: name.trim(), accentColor: accentKey });
       await setSecondaryLanguage(deck.id, secondaryLanguage ?? null);
-      await setStudyReversed(deck.id, studyReversed);
+      await setReverseRate(deck.id, reverseRate);
       await setShowExamplesOnFront(deck.id, showExamplesOnFront);
       await setShowExamplesOnBack(deck.id, showExamplesOnBack);
       await setDeckTags(deck.id, tags);
@@ -246,6 +245,12 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       return {
         title: 'Daily limit',
         body: 'Maximum cards reviewed in one session. Set to 0 for unlimited.',
+      };
+    }
+    if (pacingInfoOpen === 'reverseRate') {
+      return {
+        title: 'Reverse practice',
+        body: 'How often Deckly asks you to translate in the opposite direction. At 100%, all cards are shown reversed.',
       };
     }
     return null;
@@ -372,36 +377,45 @@ export function DeckSettingsScreen(props: { deckId: string }) {
               </Pressable>
 
               <View style={{ gap: 6 }}>
-                <Row style={{ alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <View style={{ gap: 10, paddingVertical: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={{ fontWeight: '500', color: theme.colors.textMuted }}>
-                      Switch card sides
+                      Reverse practice
                     </Text>
                     <Pressable
-                      onPress={() => setStudyReversedInfoOpen(true)}
+                      onPress={() => setPacingInfoOpen('reverseRate')}
                       hitSlop={10}
                       style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
                     >
                       <Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} />
                     </Pressable>
                   </View>
-                  <View>
-                    {Platform.OS === 'ios' ? (
-                      <Switch
-                        value={studyReversed}
-                        onValueChange={setStudyReversedState}
-                        trackColor={{
-                          false: theme.colors.surface2,
-                          true: theme.colors.primaryGradientEnd,
-                        }}
-                        thumbColor={studyReversed ? '#FFFFFF' : '#F4F5F7'}
-                        ios_backgroundColor={theme.colors.surface2}
-                      />
-                    ) : (
-                      <TogglePill value={studyReversed} onToggle={setStudyReversedState} />
-                    )}
+                  <View style={styles.reverseRateOptions}>
+                    {REVERSE_RATE_OPTIONS.map((option) => {
+                      const selected = reverseRate === option;
+                      return (
+                        <Pressable
+                          key={option}
+                          onPress={() => setReverseRateState(option)}
+                          style={({ pressed }) => [
+                            styles.reverseRateOption,
+                            selected && styles.reverseRateOptionSelected,
+                            { opacity: pressed ? 0.8 : 1 },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.reverseRateOptionText,
+                              selected && styles.reverseRateOptionTextSelected,
+                            ]}
+                          >
+                            {option}%
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                </Row>
+                </View>
                 <ToggleRow
                   label="Show examples on front"
                   value={showExamplesOnFront}
@@ -516,13 +530,6 @@ export function DeckSettingsScreen(props: { deckId: string }) {
       </View>
 
       <InfoModal
-        visible={studyReversedInfoOpen}
-        title="Switch card sides"
-        onClose={() => setStudyReversedInfoOpen(false)}
-      >
-        <Text variant="muted">Show the back first and reveal the front during review.</Text>
-      </InfoModal>
-      <InfoModal
         visible={!!pacingInfoOpen}
         title={pacingInfo?.title ?? 'Review pacing'}
         onClose={() => setPacingInfoOpen(null)}
@@ -570,6 +577,32 @@ function createStyles(theme: ReturnType<typeof useDecklyTheme>) {
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    reverseRateOptions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    reverseRateOption: {
+      minWidth: 62,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      alignItems: 'center',
+    },
+    reverseRateOptionSelected: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary,
+    },
+    reverseRateOptionText: {
+      color: theme.colors.text,
+      fontWeight: '700' as const,
+    },
+    reverseRateOptionTextSelected: {
+      color: '#fff',
     },
     pacingRow: {
       alignItems: 'center',
